@@ -1,0 +1,17 @@
+[package]
+name = "muon"
+version = "0.0.1"
+license = "MIT OR Apache-2.0"
+keywords = ["serde"]
+categories = ["encoding"]
+edition = "2018"
+publish = false
+
+[dependencies]
+itoa = { version = "0.4", features = ["i128"] }
+num = "0.2"
+num-traits = "0.2"
+serde = "1.0"
+
+[dev-dependencies]
+serde_derive = "1.0"
