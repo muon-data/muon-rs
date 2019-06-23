@@ -8,6 +8,7 @@
 mod de;
 mod error;
 mod intparse;
+mod lines;
 mod ser;
 
 pub use de::{from_str, Deserializer};

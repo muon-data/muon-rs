@@ -4,19 +4,23 @@
 //
 use crate::error::{Error, Result};
 use crate::intparse::{self, Integer};
+use crate::lines::{Line, LineIter};
 use serde::de::{
     self, Deserialize, DeserializeSeed, MapAccess, SeqAccess, Visitor,
 };
 
 /// MuON deserializer
 pub struct Deserializer<'de> {
-    input: &'de str,
+    iter: LineIter<'de>,
     line: Option<Line<'de>>,
+    keys: Vec<&'static [&'static str]>,
 }
 
 impl<'de> Deserializer<'de> {
     fn from_str(input: &'de str) -> Self {
-        Deserializer { input, line: None }
+        let iter = LineIter::new(input);
+        let keys = vec![];
+        Deserializer { iter, line: None, keys }
     }
 }
 
@@ -27,183 +31,30 @@ where
 {
     let mut deserializer = Deserializer::from_str(s);
     let t = T::deserialize(&mut deserializer)?;
-    if deserializer.input.is_empty() {
-        Ok(t)
-    } else {
-        Err(Error::TrailingCharacters)
-    }
-}
-
-/// Line Types
-enum Line<'a> {
-    /// Schema separator (:::)
-    SchemaSeparator,
-    /// Blank
-    Blank,
-    /// Comment (starting with #)
-    Comment(&'a str),
-    /// Definition (key: value)
-    Definition(&'a str, &'a str),
-    /// Colon Definition (key:: value)
-    DefDouble(&'a str, &'a str),
-}
-
-/// Line parsing states
-enum LineState {
-    /// Start state
-    Start,
-    /// Invalid line
-    Invalid,
-    /// Comment
-    Comment,
-    /// Key with no quoting
-    KeyNotQuoted,
-    /// Quoted key with even number of quotes (true means key not blank)
-    KeyQuotedEven(bool),
-    /// Quoted key with odd number of quotes (true means key not blank)
-    KeyQuotedOdd(bool),
-    /// Key with colon at byte offset
-    KeyColon(usize),
-    /// Key with double colon at byte offset
-    KeyDoubleColon(usize),
-    /// Definition with colon at byte offset
-    Definition(usize),
-    /// Definition with double colon at byte offset
-    DefDouble(usize),
-}
-
-impl LineState {
-    /// Update line state with next character
-    fn parse(&self, i: usize, c: char) -> Self {
-        use LineState::*;
-        match self {
-            Start => match c {
-                ' ' => Start,
-                '#' => Comment,
-                ':' if i > 0 => KeyColon(i),
-                ':' => Invalid,
-                '"' => KeyQuotedOdd(false),
-                _ => KeyNotQuoted,
-            },
-            KeyNotQuoted => match c {
-                ':' => KeyColon(i),
-                _ => KeyNotQuoted,
-            },
-            KeyQuotedOdd(b) => match c {
-                '"' => KeyQuotedEven(*b),
-                _ => KeyQuotedOdd(true),
-            },
-            KeyQuotedEven(b) => match c {
-                '"' => KeyQuotedOdd(true), // doubled quote
-                ':' if *b => KeyColon(i),
-                _ => Invalid,
-            },
-            KeyColon(k) => match c {
-                ' ' => Definition(*k),
-                ':' => KeyDoubleColon(*k),
-                _ => Invalid,
-            },
-            KeyDoubleColon(k) => match c {
-                ' ' => DefDouble(*k),
-                _ => Invalid,
-            },
-            _ => Invalid,
-        }
-    }
-
-    /// Check if line state is done
-    fn done<'a>(&self, s: &'a str) -> Option<Result<Line<'a>>> {
-        use LineState::*;
-        match self {
-            Invalid => Some(Err(Error::InvalidLine(s.to_string()))),
-            Comment => Some(Ok(Line::Comment(s))),
-            Definition(k) => {
-                let (key, value) = s.split_at(*k);
-                let v = value.len().min(2); // colon and space
-                let value = &value[v..];
-                Some(Ok(Line::Definition(key, value)))
-            }
-            DefDouble(k) => {
-                let (key, value) = s.split_at(*k);
-                let v = value.len().min(3); // colons and space
-                let value = &value[v..];
-                Some(Ok(Line::DefDouble(key, value)))
-            }
-            _ => None,
-        }
-    }
-}
-
-impl<'a> Line<'a> {
-    /// Parse one line
-    fn parse(s: &'a str) -> Result<Self> {
-        if s.len() == 0 {
-            Ok(Line::Blank)
-        } else if s == ":::" {
-            Ok(Line::SchemaSeparator)
-        } else {
-            let mut p = LineState::Start;
-            for (i, c) in s.char_indices() {
-                p = p.parse(i, c);
-                if let Some(r) = p.done(s) {
-                    return r;
-                }
-            }
-            // Check missing space after colon
-            if let Some(r) = p.parse(s.len(), ' ').done(s) {
-                r
-            } else {
-                Err(Error::InvalidLine(s.to_string()))
-            }
-        }
-    }
+    Ok(t)
 }
 
 impl<'de> Deserializer<'de> {
-    /// Get the next line
-    fn next_line(&mut self) -> Result<Option<Line<'de>>> {
-        if let Some(lf) = self.input.find('\n') {
-            let (line, remaining) = self.input.split_at(lf);
-            self.input = &remaining[1..];
-            Ok(Some(Line::parse(line)?))
-        } else if self.input.len() > 0 {
-            Err(Error::TrailingCharacters)
-        } else {
-            Ok(None)
-        }
-    }
 
     /// Update to next definition
     fn next_def(&mut self) -> Result<Option<()>> {
-        self.line = None;
-        while let Some(line) = self.next_line()? {
-            self.line = Some(line);
-            if let Some(_) = self.definition() {
+        while let Some(line) = self.iter.next() {
+            if let Line::Invalid(e, ln) = line {
+                return Err(Error::ParsingError(format!("{:?}: {}", e, ln)));
+            }
+            if let Some(_) = line.key() {
+                self.line = Some(line);
                 return Ok(Some(()));
             }
         }
         Ok(None)
     }
 
-    /// Get the current definition
-    fn definition(&self) -> Option<&Line<'de>> {
-        if let Some(line) = &self.line {
-            match line {
-                Line::Definition(_, _) | Line::DefDouble(_, _) => Some(line),
-                _ => None,
-            }
-        } else {
-            None
-        }
-    }
-
     /// Get the current key
     fn curr_key(&self) -> Result<&'de str> {
-        if let Some(d) = self.definition() {
-            match d {
-                Line::Definition(k, _) => return Ok(k),
-                Line::DefDouble(k, _) => return Ok(k),
-                _ => (),
+        if let Some(line) = &self.line {
+            if let Some(key) = line.key() {
+                return Ok(key);
             }
         }
         Err(Error::Eof)
@@ -211,11 +62,9 @@ impl<'de> Deserializer<'de> {
 
     /// Get the current value
     fn curr_value(&self) -> Result<&'de str> {
-        if let Some(d) = self.definition() {
-            match d {
-                Line::Definition(_, v) => return Ok(v),
-                Line::DefDouble(_, v) => return Ok(v),
-                _ => (),
+        if let Some(line) = &self.line {
+            if let Some(value) = line.value() {
+                return Ok(value);
             }
         }
         Err(Error::Eof)
@@ -384,12 +233,8 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        if self.input.starts_with("null") {
-            self.input = &self.input["null".len()..];
-            visitor.visit_none()
-        } else {
-            visitor.visit_some(self)
-        }
+        // FIXME
+        visitor.visit_some(self)
     }
 
     fn deserialize_unit<V>(self, visitor: V) -> Result<V::Value>
@@ -421,15 +266,14 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         visitor.visit_newtype_struct(self)
     }
 
-    fn deserialize_seq<V>(mut self, visitor: V) -> Result<V::Value>
+    fn deserialize_seq<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
         // FIXME: is this a regular list or a list of dicts?
         //        that needs to be in the state somehow...
 
-        let value = visitor.visit_seq(&mut self)?;
-        Ok(value)
+        visitor.visit_seq(self)
     }
 
     fn deserialize_tuple<V>(self, _len: usize, visitor: V) -> Result<V::Value>
@@ -451,25 +295,27 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         self.deserialize_seq(visitor)
     }
 
-    fn deserialize_map<V>(mut self, visitor: V) -> Result<V::Value>
+    fn deserialize_map<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
         // FIXME: make note of indent level
-        let value = visitor.visit_map(&mut self)?;
-        Ok(value)
+        visitor.visit_map(self)
     }
 
     fn deserialize_struct<V>(
         self,
         _name: &'static str,
-        _fields: &'static [&'static str],
+        fields: &'static [&'static str],
         visitor: V,
     ) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        self.deserialize_map(visitor)
+        self.keys.push(fields);
+        let r = self.deserialize_map(visitor);
+        self.keys.pop();
+        r
     }
 
     fn deserialize_enum<V>(
@@ -506,6 +352,7 @@ impl<'de> SeqAccess<'de> for Deserializer<'de> {
     where
         T: DeserializeSeed<'de>,
     {
+        // FIXME: if no more elements in list return None
         seed.deserialize(&mut *self).map(Some)
     }
 }
@@ -553,6 +400,23 @@ mod test {
             int: -5,
         };
         assert_eq!(expected, from_str(a)?);
+        Ok(())
+    }
+
+    #[derive(Deserialize, PartialEq, Debug)]
+    struct B {
+        flags: Vec<bool>,
+        values: Vec<String>,
+    }
+
+    #[test]
+    fn struct_b() -> Result<(), Box<Error>> {
+        let b = "flags: false true true false\nvalues: Hello World\n";
+        let expected = B {
+            flags: vec![false, true, true, false],
+            values: vec!["Hello".to_string(), "World".to_string()],
+        };
+        assert_eq!(expected, from_str(b)?);
         Ok(())
     }
 }

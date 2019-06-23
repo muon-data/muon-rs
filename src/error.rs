@@ -2,8 +2,6 @@
 //
 // Copyright (c) 2019  Douglas Lau
 //
-use serde::{de, ser};
-//use std;
 use std::error::Error as _;
 use std::fmt::{self, Display};
 
@@ -19,9 +17,7 @@ pub enum Error {
 
     // Deserializer errors
     Eof,
-    InvalidLine(String),
-    MissingLineFeed,
-    TrailingCharacters,
+    ParsingError(String),
 
     ExpectedBoolean,
     ExpectedChar,
@@ -31,13 +27,13 @@ pub enum Error {
     ExpectedEnum,
 }
 
-impl ser::Error for Error {
+impl serde::ser::Error for Error {
     fn custom<T: Display>(msg: T) -> Self {
         Error::Message(msg.to_string())
     }
 }
 
-impl de::Error for Error {
+impl serde::de::Error for Error {
     fn custom<T: Display>(msg: T) -> Self {
         Error::Message(msg.to_string())
     }
@@ -56,6 +52,7 @@ impl std::error::Error for Error {
             Error::InvalidKey => "invalid key: string keys only",
             Error::UnsupportedType => "unsupported type",
             Error::Eof => "unexpected end of input",
+            Error::ParsingError(ref msg) => msg,
             _ => unimplemented!(),
         }
     }
