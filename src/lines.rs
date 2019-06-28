@@ -15,7 +15,7 @@ pub struct DefIter<'a> {
     /// Number of spaces in one indent
     indent_spaces: Option<usize>,
     /// Current define (for append handling)
-    define: Option<Define<'a>>,
+    define: Define<'a>,
 }
 
 /// Parse errors
@@ -76,8 +76,8 @@ enum State {
 pub enum Define<'a> {
     /// Invalid line or definition
     Invalid(ParseError, &'a str),
-    /// Valid definition (indent count, double colon, key, value)
-    Valid(usize, bool, &'a str, &'a str),
+    /// Valid definition (indent count, key, value)
+    Valid(usize, &'a str, &'a str),
 }
 
 impl State {
@@ -219,11 +219,30 @@ impl<'a> Iterator for LineIter<'a> {
     }
 }
 
+impl<'a> Define<'a> {
+    /// Split a define for a list
+    pub fn split_list(self) -> (Self, Option<Self>) {
+        match self {
+            Define::Valid(indent, key, value) => {
+                let v: Vec<&str> = value.splitn(2, ' ').collect();
+                if v.len() == 1 {
+                    (self, None)
+                } else {
+                    (Define::Valid(indent, key, v[0]),
+                     Some(Define::Valid(indent, key, v[1])))
+                }
+            }
+            _ => (self, None),
+        }
+    }
+}
+
 impl<'a> DefIter<'a> {
     /// Create a new definition iterator
     pub fn new(lines: LineIter<'a>) -> Self {
         let indent_spaces = None;
-        let define = None;
+        // this define is arbitrary
+        let define = Define::Invalid(ParseError::InvalidIndent, "");
         DefIter {
             lines,
             indent_spaces,
@@ -243,7 +262,7 @@ impl<'a> DefIter<'a> {
     /// Get the current key length (number of characters)
     fn key_len(&self) -> usize {
         match self.define {
-            Some(Define::Valid(indent, _, key, _)) => {
+            Define::Valid(indent, key, _) => {
                 let i = indent * self.indent_spaces.unwrap_or(0);
                 let k = key.chars().count();
                 i + k
@@ -253,13 +272,13 @@ impl<'a> DefIter<'a> {
     }
 
     /// Get a define from key and value
-    fn define(&self, double: bool, key: &'a str, value: &'a str) -> Define<'a> {
+    fn define(&self, key: &'a str, value: &'a str) -> Define<'a> {
         // Is key an "append" (all spaces)?
         if key.chars().all(|c| c == ' ') {
             if key.len() == self.key_len() {
                 match self.define {
-                    Some(Define::Valid(indent, _, key, _)) => {
-                        Define::Valid(indent, double, key, value)
+                    Define::Valid(indent, key, _) => {
+                        Define::Valid(indent, key, value)
                     }
                     _ => Define::Invalid(ParseError::InvalidIndent, key),
                 }
@@ -272,7 +291,7 @@ impl<'a> DefIter<'a> {
             while let Some(' ') = k.chars().next() {
                 k = &k[1..];
             }
-            Define::Valid(indent, double, k, value)
+            Define::Valid(indent, k, value)
         } else {
             Define::Invalid(ParseError::InvalidIndent, key)
         }
@@ -299,28 +318,28 @@ impl<'a> DefIter<'a> {
 }
 
 impl<'a> Iterator for DefIter<'a> {
-    type Item = Define<'a>;
+    type Item = (Define<'a>, bool);
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(ln) = self.lines.next() {
             self.set_indent_spaces(&ln);
             match ln {
                 Line::SchemaSeparator => {
-                    return Some(Define::Invalid(
+                    return Some((Define::Invalid(
                         ParseError::InvalidSchemaSeparator,
                         ":::",
-                    ))
+                    ), false))
                 }
                 Line::Invalid(err, line) => {
-                    return Some(Define::Invalid(err, line))
+                    return Some((Define::Invalid(err, line), false))
                 }
                 Line::DefSingle(key, value) => {
-                    self.define = Some(self.define(false, key, value));
-                    return self.define;
+                    self.define = self.define(key, value);
+                    return Some((self.define, false));
                 }
                 Line::DefDouble(key, value) => {
-                    self.define = Some(self.define(true, key, value));
-                    return self.define;
+                    self.define = self.define(key, value);
+                    return Some((self.define, true));
                 }
                 _ => (),
             }
@@ -378,15 +397,15 @@ mod test {
         let mut di = DefIter::new(li);
         assert_eq!(
             di.next().unwrap(),
-            Define::Invalid(ParseError::InvalidSchemaSeparator, ":::")
+            (Define::Invalid(ParseError::InvalidSchemaSeparator, ":::"), false)
         );
-        assert_eq!(di.next().unwrap(), Define::Valid(0, false, "a", "value a"));
-        assert_eq!(di.next().unwrap(), Define::Valid(0, false, "b", "value b"));
-        assert_eq!(di.next().unwrap(), Define::Valid(0, false, "c", ""));
-        assert_eq!(di.next().unwrap(), Define::Valid(0, false, "c", "append"));
+        assert_eq!(di.next().unwrap(), (Define::Valid(0, "a", "value a"), false));
+        assert_eq!(di.next().unwrap(), (Define::Valid(0, "b", "value b"), false));
+        assert_eq!(di.next().unwrap(), (Define::Valid(0, "c", ""), false));
+        assert_eq!(di.next().unwrap(), (Define::Valid(0, "c", "append"), false));
         assert_eq!(
             di.next().unwrap(),
-            Define::Invalid(ParseError::InvalidIndent, "  ")
+            (Define::Invalid(ParseError::InvalidIndent, "  "), false)
         );
     }
 
@@ -396,15 +415,15 @@ mod test {
             "a:\n  b: 1\n  c:: test\n  d:\n   x: bad\n    e: 5.5\n  f: -9\n";
         let li = LineIter::new(a);
         let mut di = DefIter::new(li);
-        assert_eq!(di.next().unwrap(), Define::Valid(0, false, "a", ""));
-        assert_eq!(di.next().unwrap(), Define::Valid(1, false, "b", "1"));
-        assert_eq!(di.next().unwrap(), Define::Valid(1, true, "c", "test"));
-        assert_eq!(di.next().unwrap(), Define::Valid(1, false, "d", ""));
+        assert_eq!(di.next().unwrap(), (Define::Valid(0, "a", ""), false));
+        assert_eq!(di.next().unwrap(), (Define::Valid(1, "b", "1"), false));
+        assert_eq!(di.next().unwrap(), (Define::Valid(1, "c", "test"), true));
+        assert_eq!(di.next().unwrap(), (Define::Valid(1, "d", ""), false));
         assert_eq!(
             di.next().unwrap(),
-            Define::Invalid(ParseError::InvalidIndent, "   x")
+            (Define::Invalid(ParseError::InvalidIndent, "   x"), false)
         );
-        assert_eq!(di.next().unwrap(), Define::Valid(2, false, "e", "5.5"));
-        assert_eq!(di.next().unwrap(), Define::Valid(1, false, "f", "-9"));
+        assert_eq!(di.next().unwrap(), (Define::Valid(2, "e", "5.5"), false));
+        assert_eq!(di.next().unwrap(), (Define::Valid(1, "f", "-9"), false));
     }
 }

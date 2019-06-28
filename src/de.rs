@@ -12,47 +12,122 @@ use std::iter::Peekable;
 
 /// Iterator for key/value mappings
 struct MappingIter<'a> {
+    /// Define iterator
     defs: Peekable<DefIter<'a>>,
+    /// Stack of nested keys and list flags
+    stack: Vec<(Option<&'a str>, bool)>,
+    /// Current define (for list handling)
+    define: Option<(Define<'a>, bool)>,
+}
+
+impl<'a> Iterator for MappingIter<'a> {
+    type Item = Define<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.define.is_none() {
+            self.define = self.defs.next();
+        }
+        if self.is_list() {
+            self.next_list()
+        } else if let Some((define, _)) = self.define {
+            self.define = None;
+            Some(define)
+        } else {
+            None
+        }
+    }
 }
 
 impl<'a> MappingIter<'a> {
     /// Create a new key/value mapping iterator
     fn new(iter: LineIter<'a>) -> Self {
         let defs = DefIter::new(iter).peekable();
-        MappingIter { defs }
+        let stack = vec![];
+        let define = None;
+        MappingIter { defs, stack, define }
     }
 
-    /// Check if the key is valid
-    fn check_key(&mut self) -> Result<bool> {
-        match self.defs.peek() {
-            Some(Define::Invalid(e, ln)) => {
-                Err(Error::FailedParse(format!("{:?} {}", e, ln)))
-            }
-            Some(_) => Ok(true),
-            None => Ok(false),
+    /// Peek at next define
+    fn peek(&mut self) -> Option<Define<'a>> {
+        if self.define.is_none() {
+            self.define = self.defs.next();
+        }
+        if let Some((define, _)) = self.define {
+            Some(define)
+        } else {
+            None
         }
     }
 
-    /// Peek the current key
-    fn peek_key(&mut self) -> Result<&'a str> {
-        match self.defs.peek() {
-            Some(Define::Invalid(e, ln)) => {
-                Err(Error::FailedParse(format!("{:?} {}", e, ln)))
-            }
-            Some(Define::Valid(_, _, k, _)) => Ok(k),
-            None => Err(Error::Eof),
+    /// Push onto the mapping stack
+    fn push_stack(&mut self) {
+        self.stack.push((None, false));
+    }
+
+    /// Pop from the mapping stack
+    fn pop_stack(&mut self) {
+        self.stack.pop();
+    }
+
+    /// Set the current key on stack
+    fn set_key(&mut self, key: Option<&'a str>) {
+        if let Some((_, list)) = self.stack.pop() {
+            self.stack.push((key, list));
         }
     }
 
-    /// Get the current value
-    fn get_value(&mut self) -> Result<&'a str> {
-        match self.defs.next() {
-            Some(Define::Invalid(e, ln)) => {
-                Err(Error::FailedParse(format!("{:?} {}", e, ln)))
-            }
-            Some(Define::Valid(_, _, _, v)) => Ok(v),
-            None => Err(Error::Eof),
+    /// Set the top of stack to a list
+    fn set_list(&mut self, list: bool) {
+        if let Some((key, _)) = self.stack.pop() {
+            self.stack.push((key, list));
         }
+    }
+
+    /// Check if the current define is a list
+    fn is_list(&self) -> bool {
+        let ln = self.stack.len();
+        if ln > 0 {
+            let (_, list) = self.stack[ln - 1];
+            list
+        } else {
+            false
+        }
+    }
+
+    /// Get the next define in a list
+    fn next_list(&mut self) -> Option<Define<'a>> {
+        if let Some((define, double)) = self.define {
+            let (d0, d1) = define.split_list();
+            self.define = match d1 {
+                Some(d) => Some((d, double)),
+                None => None,
+            };
+            Some(d0)
+        } else {
+            None
+        }
+    }
+
+    /// Check indent nesting
+    fn check_indent(&mut self) -> bool {
+        if let Some(Define::Valid(indent, _, _)) = self.peek() {
+            self.stack.len() == indent + 1
+        } else {
+            false
+        }
+    }
+
+    /// Check that key matches
+    fn check_key(&mut self) -> bool {
+        let ln = self.stack.len();
+        if ln > 0 {
+            if let (Some(k), _) = self.stack[ln - 1] {
+                if let Some(Define::Valid(_, key, _)) = self.peek() {
+                    return key == k;
+                }
+            }
+        }
+        true
     }
 }
 
@@ -79,26 +154,43 @@ where
 }
 
 impl<'de> Deserializer<'de> {
-    /// Check if the key is valid
-    fn check_key(&mut self) -> Result<bool> {
-        self.mappings.check_key()
+    /// Peek at current define
+    fn peek_define(&mut self) -> Result<Define<'de>> {
+        match self.mappings.peek() {
+            Some(Define::Invalid(e, ln)) => {
+                Err(Error::FailedParse(format!("{:?} {}", e, ln)))
+            }
+            Some(define) => Ok(define),
+            None => Err(Error::Eof),
+        }
     }
 
     /// Peek the current key
     fn peek_key(&mut self) -> Result<&'de str> {
-        self.mappings.peek_key()
+        match self.peek_define()? {
+            Define::Valid(_, k, _) => Ok(k),
+            _ => unreachable!(),
+        }
     }
 
     /// Get the current value
     fn get_value(&mut self) -> Result<&'de str> {
-        self.mappings.get_value()
+        match self.mappings.next() {
+            Some(Define::Invalid(e, ln)) => {
+                Err(Error::FailedParse(format!("{:?} {}", e, ln)))
+            }
+            Some(Define::Valid(_, _, v)) => Ok(v),
+            None => Err(Error::Eof),
+        }
     }
 
+    /// Parse a text value
     fn parse_text(&mut self) -> Result<&'de str> {
-        // FIXME: in a list, get one value only
+        // FIXME: if next line is an "append", build a temp String
         Ok(self.get_value()?)
     }
 
+    /// Parse a char value
     fn parse_char(&mut self) -> Result<char> {
         let text = self.parse_text()?;
         if text.len() == 1 {
@@ -109,6 +201,7 @@ impl<'de> Deserializer<'de> {
         Err(Error::ExpectedChar)
     }
 
+    /// Parse a bool value
     fn parse_bool(&mut self) -> Result<bool> {
         let value = self.get_value()?;
         match value {
@@ -118,6 +211,7 @@ impl<'de> Deserializer<'de> {
         }
     }
 
+    /// Parse an int value
     fn parse_int<T: Integer>(&mut self) -> Result<T> {
         let value = self.get_value()?;
         if let Some(v) = intparse::from_str(value) {
@@ -236,7 +330,6 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        // FIXME: if next line is an "append", build a temp String
         visitor.visit_borrowed_str(self.parse_text()?)
     }
 
@@ -265,7 +358,6 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        // FIXME
         visitor.visit_some(self)
     }
 
@@ -302,6 +394,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
+        self.mappings.set_list(true);
         visitor.visit_seq(self)
     }
 
@@ -328,6 +421,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
+        self.mappings.push_stack();
         visitor.visit_map(self)
     }
 
@@ -359,7 +453,9 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        visitor.visit_borrowed_str(self.peek_key()?)
+        let key = self.peek_key()?;
+        self.mappings.set_key(Some(key));
+        visitor.visit_borrowed_str(key)
     }
 }
 
@@ -370,10 +466,11 @@ impl<'de> SeqAccess<'de> for Deserializer<'de> {
     where
         T: DeserializeSeed<'de>,
     {
-        // FIXME: check for more at this indent level
-        if self.check_key()? {
+        if self.mappings.check_indent() && self.mappings.check_key() {
             seed.deserialize(&mut *self).map(Some)
         } else {
+            self.mappings.set_list(false);
+            self.mappings.set_key(None);
             Ok(None)
         }
     }
@@ -386,10 +483,10 @@ impl<'de> MapAccess<'de> for Deserializer<'de> {
     where
         K: DeserializeSeed<'de>,
     {
-        // FIXME: check for more at this indent level
-        if self.check_key()? {
+        if self.mappings.check_indent() {
             seed.deserialize(&mut *self).map(Some)
         } else {
+            self.mappings.pop_stack();
             Ok(None)
         }
     }
