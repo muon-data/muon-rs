@@ -17,7 +17,7 @@ pub enum Error {
 
     // Deserializer errors
     Eof,
-    ParsingError(String),
+    FailedParse(String),
 
     ExpectedBoolean,
     ExpectedChar,
@@ -52,7 +52,7 @@ impl std::error::Error for Error {
             Error::InvalidKey => "invalid key: string keys only",
             Error::UnsupportedType => "unsupported type",
             Error::Eof => "unexpected end of input",
-            Error::ParsingError(ref msg) => msg,
+            Error::FailedParse(ref msg) => msg,
             _ => unimplemented!(),
         }
     }

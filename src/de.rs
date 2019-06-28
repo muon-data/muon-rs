@@ -4,23 +4,67 @@
 //
 use crate::error::{Error, Result};
 use crate::intparse::{self, Integer};
-use crate::lines::{Line, LineIter};
+use crate::lines::{DefIter, Define, LineIter};
 use serde::de::{
     self, Deserialize, DeserializeSeed, MapAccess, SeqAccess, Visitor,
 };
+use std::iter::Peekable;
+
+/// Iterator for key/value mappings
+struct MappingIter<'a> {
+    defs: Peekable<DefIter<'a>>,
+}
+
+impl<'a> MappingIter<'a> {
+    /// Create a new key/value mapping iterator
+    fn new(iter: LineIter<'a>) -> Self {
+        let defs = DefIter::new(iter).peekable();
+        MappingIter { defs }
+    }
+
+    /// Check if the key is valid
+    fn check_key(&mut self) -> Result<bool> {
+        match self.defs.peek() {
+            Some(Define::Invalid(e, ln)) => {
+                Err(Error::FailedParse(format!("{:?} {}", e, ln)))
+            }
+            Some(_) => Ok(true),
+            None => Ok(false),
+        }
+    }
+
+    /// Peek the current key
+    fn peek_key(&mut self) -> Result<&'a str> {
+        match self.defs.peek() {
+            Some(Define::Invalid(e, ln)) => {
+                Err(Error::FailedParse(format!("{:?} {}", e, ln)))
+            }
+            Some(Define::Valid(_, _, k, _)) => Ok(k),
+            None => Err(Error::Eof),
+        }
+    }
+
+    /// Get the current value
+    fn get_value(&mut self) -> Result<&'a str> {
+        match self.defs.next() {
+            Some(Define::Invalid(e, ln)) => {
+                Err(Error::FailedParse(format!("{:?} {}", e, ln)))
+            }
+            Some(Define::Valid(_, _, _, v)) => Ok(v),
+            None => Err(Error::Eof),
+        }
+    }
+}
 
 /// MuON deserializer
 pub struct Deserializer<'de> {
-    iter: LineIter<'de>,
-    line: Option<Line<'de>>,
-    keys: Vec<&'static [&'static str]>,
+    mappings: MappingIter<'de>,
 }
 
 impl<'de> Deserializer<'de> {
     fn from_str(input: &'de str) -> Self {
-        let iter = LineIter::new(input);
-        let keys = vec![];
-        Deserializer { iter, line: None, keys }
+        let mappings = MappingIter::new(LineIter::new(input));
+        Deserializer { mappings }
     }
 }
 
@@ -35,43 +79,24 @@ where
 }
 
 impl<'de> Deserializer<'de> {
-
-    /// Update to next definition
-    fn next_def(&mut self) -> Result<Option<()>> {
-        while let Some(line) = self.iter.next() {
-            if let Line::Invalid(e, ln) = line {
-                return Err(Error::ParsingError(format!("{:?}: {}", e, ln)));
-            }
-            if let Some(_) = line.key() {
-                self.line = Some(line);
-                return Ok(Some(()));
-            }
-        }
-        Ok(None)
+    /// Check if the key is valid
+    fn check_key(&mut self) -> Result<bool> {
+        self.mappings.check_key()
     }
 
-    /// Get the current key
-    fn curr_key(&self) -> Result<&'de str> {
-        if let Some(line) = &self.line {
-            if let Some(key) = line.key() {
-                return Ok(key);
-            }
-        }
-        Err(Error::Eof)
+    /// Peek the current key
+    fn peek_key(&mut self) -> Result<&'de str> {
+        self.mappings.peek_key()
     }
 
     /// Get the current value
-    fn curr_value(&self) -> Result<&'de str> {
-        if let Some(line) = &self.line {
-            if let Some(value) = line.value() {
-                return Ok(value);
-            }
-        }
-        Err(Error::Eof)
+    fn get_value(&mut self) -> Result<&'de str> {
+        self.mappings.get_value()
     }
 
     fn parse_text(&mut self) -> Result<&'de str> {
-        Ok(self.curr_value()?)
+        // FIXME: in a list, get one value only
+        Ok(self.get_value()?)
     }
 
     fn parse_char(&mut self) -> Result<char> {
@@ -85,7 +110,7 @@ impl<'de> Deserializer<'de> {
     }
 
     fn parse_bool(&mut self) -> Result<bool> {
-        let value = self.curr_value()?;
+        let value = self.get_value()?;
         match value {
             "true" => Ok(true),
             "false" => Ok(false),
@@ -94,7 +119,7 @@ impl<'de> Deserializer<'de> {
     }
 
     fn parse_int<T: Integer>(&mut self) -> Result<T> {
-        let value = self.curr_value()?;
+        let value = self.get_value()?;
         if let Some(v) = intparse::from_str(value) {
             Ok(v)
         } else {
@@ -112,6 +137,13 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     {
         // FIXME: use schema to know what types to return
         unimplemented!();
+    }
+
+    fn deserialize_ignored_any<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: Visitor<'de>,
+    {
+        self.deserialize_any(visitor)
     }
 
     fn deserialize_bool<V>(self, visitor: V) -> Result<V::Value>
@@ -270,9 +302,6 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        // FIXME: is this a regular list or a list of dicts?
-        //        that needs to be in the state somehow...
-
         visitor.visit_seq(self)
     }
 
@@ -299,23 +328,19 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        // FIXME: make note of indent level
         visitor.visit_map(self)
     }
 
     fn deserialize_struct<V>(
         self,
         _name: &'static str,
-        fields: &'static [&'static str],
+        _fields: &'static [&'static str],
         visitor: V,
     ) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        self.keys.push(fields);
-        let r = self.deserialize_map(visitor);
-        self.keys.pop();
-        r
+        self.deserialize_map(visitor)
     }
 
     fn deserialize_enum<V>(
@@ -334,14 +359,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        visitor.visit_borrowed_str(self.curr_key()?)
-    }
-
-    fn deserialize_ignored_any<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
-        self.deserialize_any(visitor)
+        visitor.visit_borrowed_str(self.peek_key()?)
     }
 }
 
@@ -352,8 +370,12 @@ impl<'de> SeqAccess<'de> for Deserializer<'de> {
     where
         T: DeserializeSeed<'de>,
     {
-        // FIXME: if no more elements in list return None
-        seed.deserialize(&mut *self).map(Some)
+        // FIXME: check for more at this indent level
+        if self.check_key()? {
+            seed.deserialize(&mut *self).map(Some)
+        } else {
+            Ok(None)
+        }
     }
 }
 
@@ -364,7 +386,8 @@ impl<'de> MapAccess<'de> for Deserializer<'de> {
     where
         K: DeserializeSeed<'de>,
     {
-        if let Some(_) = self.next_def()? {
+        // FIXME: check for more at this indent level
+        if self.check_key()? {
             seed.deserialize(&mut *self).map(Some)
         } else {
             Ok(None)
