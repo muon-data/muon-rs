@@ -18,13 +18,6 @@ pub enum Error {
     // Deserializer errors
     Eof,
     FailedParse(String),
-
-    ExpectedBoolean,
-    ExpectedChar,
-    ExpectedInteger,
-    ExpectedString,
-    ExpectedMap,
-    ExpectedEnum,
 }
 
 impl serde::ser::Error for Error {
@@ -53,7 +46,6 @@ impl std::error::Error for Error {
             Error::UnsupportedType => "unsupported type",
             Error::Eof => "unexpected end of input",
             Error::FailedParse(ref msg) => msg,
-            _ => unimplemented!(),
         }
     }
 }

@@ -5,6 +5,7 @@
 use crate::error::{Error, Result};
 use crate::intparse::{self, Integer};
 use crate::lines::{DefIter, Define, LineIter};
+use lexical::FromLexical;
 use serde::de::{
     self, Deserialize, DeserializeSeed, MapAccess, SeqAccess, Visitor,
 };
@@ -198,7 +199,7 @@ impl<'de> Deserializer<'de> {
                 return Ok(c);
             }
         }
-        Err(Error::ExpectedChar)
+        Err(Error::FailedParse(format!("char: {}", text)))
     }
 
     /// Parse a bool value
@@ -207,7 +208,7 @@ impl<'de> Deserializer<'de> {
         match value {
             "true" => Ok(true),
             "false" => Ok(false),
-            _ => Err(Error::ExpectedBoolean),
+            _ => Err(Error::FailedParse(format!("bool: {}", value))),
         }
     }
 
@@ -217,9 +218,56 @@ impl<'de> Deserializer<'de> {
         if let Some(v) = intparse::from_str(value) {
             Ok(v)
         } else {
-            Err(Error::ExpectedInteger)
+            Err(Error::FailedParse(format!("int: {}", value)))
         }
     }
+
+    /// Parse a float value
+    fn parse_float<T: FromLexical>(&mut self) -> Result<T> {
+        let value = self.get_value()?;
+        let res = lexical::try_parse(value);
+        match res {
+            Ok(v) => Ok(v),
+            Err(e) => parse_filtered_float(value, e),
+        }
+    }
+}
+
+/// Parse a float after filtering out underscores
+fn parse_filtered_float<T: FromLexical>(value: &str, e: lexical::Error)
+    -> Result<T>
+{
+    if let lexical::ErrorKind::InvalidDigit(_) = e.kind() {
+        if let Ok(v) = lexical::try_parse(filter_float(value)) {
+            return Ok(v)
+        }
+    }
+    Err(Error::FailedParse(format!("float: {}", value)))
+}
+
+/// Filter a float, removing valid underscores
+fn filter_float(value: &str) -> String {
+    let mut val = String::with_capacity(value.len());
+    for v in value.split('_') {
+        let before = val.as_bytes();
+        let len = before.len();
+        // Check character before underscore is a decimal digit
+        if len > 0 && !char::from(before[len-1]).is_digit(10) {
+            val.push('_')
+        }
+        let after = v.as_bytes();
+        let vlen = v.len();
+        // Allow starting with decimal point
+        if len == 0 && vlen > 0 && char::from(after[0]) == '.' {
+            val.push('0')
+        }
+        // Check character after underscore is a decimal digit
+        if vlen == 0 || !char::from(after[0]).is_digit(10) {
+            val.push('_')
+        }
+        val.push_str(v);
+    }
+    val
 }
 
 impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
@@ -305,18 +353,18 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         visitor.visit_u64(self.parse_int()?)
     }
 
-    fn deserialize_f32<V>(self, _visitor: V) -> Result<V::Value>
+    fn deserialize_f32<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unimplemented!()
+        visitor.visit_f32(self.parse_float()?)
     }
 
-    fn deserialize_f64<V>(self, _visitor: V) -> Result<V::Value>
+    fn deserialize_f64<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unimplemented!()
+        visitor.visit_f64(self.parse_float()?)
     }
 
     fn deserialize_char<V>(self, visitor: V) -> Result<V::Value>
@@ -446,7 +494,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        Err(Error::ExpectedEnum)
+        unimplemented!()
     }
 
     fn deserialize_identifier<V>(self, visitor: V) -> Result<V::Value>
@@ -520,6 +568,13 @@ mod test {
             int: -5,
         };
         assert_eq!(expected, from_str(a)?);
+        let a = "b: true\nuint: 0xF00D\nint: 0b1111_0000_1111\n";
+        let expected = A {
+            b: true,
+            uint: 0xF00D,
+            int: 0xF0F,
+        };
+        assert_eq!(expected, from_str(a)?);
         Ok(())
     }
 
@@ -537,6 +592,45 @@ mod test {
             values: vec!["Hello".to_string(), "World".to_string()],
         };
         assert_eq!(expected, from_str(b)?);
+        Ok(())
+    }
+
+    #[derive(Deserialize, PartialEq, Debug)]
+    struct C {
+        float: f32,
+        double: f64,
+    }
+
+    #[test]
+    fn struct_c() -> Result<(), Box<Error>> {
+        let c = "float: +3.14159\ndouble: -123.456789e0\n";
+        let expected = C {
+            float: 3.14159,
+            double: -123.456789,
+        };
+        assert_eq!(expected, from_str(c)?);
+        let c = "float: 1e15\ndouble: inf\n";
+        let expected = C {
+            float: 1e15,
+            double: std::f64::INFINITY,
+        };
+        assert_eq!(expected, from_str(c)?);
+        let c = "float: 8_765.432_1\ndouble: -inf\n";
+        let expected = C {
+            float: 8_765.432_1,
+            double: std::f64::NEG_INFINITY,
+        };
+        assert_eq!(expected, from_str(c)?);
+        let c = "float: 123_.456\ndouble: 1.0\n";
+        assert!(from_str::<C>(c).is_err());
+        let c = "float: _123.456\ndouble: 1.0\n";
+        assert!(from_str::<C>(c).is_err());
+        let c = "float: 123.456_\ndouble: 1.0\n";
+        assert!(from_str::<C>(c).is_err());
+        let c = "float: 123.456\ndouble: 1__0.0\n";
+        assert!(from_str::<C>(c).is_err());
+        let c = "float: .123_456\ndouble: 1.0\n";
+        assert!(from_str::<C>(c).is_err());
         Ok(())
     }
 }

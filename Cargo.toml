@@ -11,6 +11,7 @@ publish = false
 itoa = { version = "0.4", features = ["i128"] }
 num = "0.2"
 num-traits = "0.2"
+lexical = "2.2"
 serde = "1.0"
 
 [dev-dependencies]
