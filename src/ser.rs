@@ -452,7 +452,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         _variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeStructVariant> {
-        Err(Error::UnsupportedType)
+        Err(Error::UnsupportedType("struct variant"))
     }
 }
 
@@ -576,10 +576,10 @@ impl<'a> ser::SerializeStructVariant for &'a mut Serializer {
     where
         V: ?Sized + Serialize,
     {
-        Err(Error::UnsupportedType)
+        Err(Error::UnsupportedType("struct variant"))
     }
     fn end(self) -> Result<()> {
-        Err(Error::UnsupportedType)
+        Err(Error::UnsupportedType("struct variant"))
     }
 }
 

@@ -9,42 +9,42 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Error {
-    Message(String),
-
-    // Serializer errors
+    Format(fmt::Error),
+    Serialize(String),
+    Deserialize(String),
+    UnsupportedType(&'static str),
     InvalidKey,
-    UnsupportedType,
-
-    // Deserializer errors
-    Eof,
+    UnexpectedEndOfInput,
     FailedParse(String),
 }
 
 impl serde::ser::Error for Error {
     fn custom<T: Display>(msg: T) -> Self {
-        Error::Message(msg.to_string())
+        Error::Serialize(msg.to_string())
     }
 }
 
 impl serde::de::Error for Error {
     fn custom<T: Display>(msg: T) -> Self {
-        Error::Message(msg.to_string())
+        Error::Deserialize(msg.to_string())
     }
 }
 
 impl Display for Error {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str(std::error::Error::description(self))
+        formatter.write_str(self.description())
     }
 }
 
 impl std::error::Error for Error {
     fn description(&self) -> &str {
         match *self {
-            Error::Message(ref msg) => msg,
-            Error::InvalidKey => "invalid key: string keys only",
-            Error::UnsupportedType => "unsupported type",
-            Error::Eof => "unexpected end of input",
+            Error::Format(ref e) => e.description(),
+            Error::Serialize(ref msg) => msg,
+            Error::Deserialize(ref msg) => msg,
+            Error::UnsupportedType(ref msg) => msg,
+            Error::InvalidKey => "string keys only",
+            Error::UnexpectedEndOfInput => "unexpected end of input",
             Error::FailedParse(ref msg) => msg,
         }
     }
@@ -52,6 +52,6 @@ impl std::error::Error for Error {
 
 impl From<fmt::Error> for Error {
     fn from(e: fmt::Error) -> Self {
-        Error::Message(e.description().to_string())
+        Error::Format(e)
     }
 }

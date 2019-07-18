@@ -11,12 +11,21 @@ use serde::de::{
 };
 use std::iter::Peekable;
 
+/// Dictionary for mapping stack
+#[derive(Debug)]
+struct Dict<'a> {
+    key: Option<&'a str>,
+    list: bool,
+    fields: &'static [&'static str],
+    visited: Vec<bool>,
+}
+
 /// Iterator for key/value mappings
 struct MappingIter<'a> {
     /// Define iterator
     defs: Peekable<DefIter<'a>>,
     /// Stack of nested keys and list flags
-    stack: Vec<(Option<&'a str>, bool)>,
+    stack: Vec<Dict<'a>>,
     /// Current define (for list handling)
     define: Option<(Define<'a>, bool)>,
 }
@@ -61,8 +70,10 @@ impl<'a> MappingIter<'a> {
     }
 
     /// Push onto the mapping stack
-    fn push_stack(&mut self) {
-        self.stack.push((None, false));
+    fn push_stack(&mut self, fields: &'static [&'static str]) {
+        let visited = vec![false; fields.len()];
+        let d = Dict { key: None, list: false, fields, visited };
+        self.stack.push(d);
     }
 
     /// Pop from the mapping stack
@@ -72,38 +83,48 @@ impl<'a> MappingIter<'a> {
 
     /// Set the current key on stack
     fn set_key(&mut self, key: Option<&'a str>) {
-        if let Some((_, list)) = self.stack.pop() {
-            self.stack.push((key, list));
+        let len = self.stack.len();
+        if len > 0 {
+            let dict = &mut self.stack[len - 1];
+            dict.key = key;
+            if let Some(f) = key {
+                for i in 0..dict.fields.len() {
+                    if dict.fields[i] == f {
+                        dict.visited[i] = true;
+                    }
+                }
+            }
         }
     }
 
     /// Set the top of stack to a list
     fn set_list(&mut self, list: bool) {
-        if let Some((key, _)) = self.stack.pop() {
-            self.stack.push((key, list));
+        let len = self.stack.len();
+        if len > 0 {
+            self.stack[len - 1].list = list;
         }
     }
 
     /// Check if the current define is a list
     fn is_list(&self) -> bool {
         let ln = self.stack.len();
-        if ln > 0 {
-            let (_, list) = self.stack[ln - 1];
-            list
-        } else {
-            false
-        }
+        ln > 0 && self.stack[ln - 1].list
     }
 
     /// Get the next define in a list
     fn next_list(&mut self) -> Option<Define<'a>> {
         if let Some((define, double)) = self.define {
-            let (d0, d1) = define.split_list();
-            self.define = match d1 {
-                Some(d) => Some((d, double)),
-                None => None,
-            };
-            Some(d0)
+            if double {
+                self.define = None;
+                Some(define)
+            } else {
+                let (d0, d1) = define.split_list();
+                self.define = match d1 {
+                    Some(d) => Some((d, double)),
+                    None => None,
+                };
+                Some(d0)
+            }
         } else {
             None
         }
@@ -122,13 +143,15 @@ impl<'a> MappingIter<'a> {
     fn check_key(&mut self) -> bool {
         let ln = self.stack.len();
         if ln > 0 {
-            if let (Some(k), _) = self.stack[ln - 1] {
+            if let Some(k) = self.stack[ln - 1].key {
                 if let Some(Define::Valid(_, key, _)) = self.peek() {
                     return key == k;
                 }
             }
+            false
+        } else {
+            false
         }
-        true
     }
 }
 
@@ -162,7 +185,7 @@ impl<'de> Deserializer<'de> {
                 Err(Error::FailedParse(format!("{:?} {}", e, ln)))
             }
             Some(define) => Ok(define),
-            None => Err(Error::Eof),
+            None => Err(Error::UnexpectedEndOfInput),
         }
     }
 
@@ -181,13 +204,12 @@ impl<'de> Deserializer<'de> {
                 Err(Error::FailedParse(format!("{:?} {}", e, ln)))
             }
             Some(Define::Valid(_, _, v)) => Ok(v),
-            None => Err(Error::Eof),
+            None => Err(Error::UnexpectedEndOfInput),
         }
     }
 
     /// Parse a text value
     fn parse_text(&mut self) -> Result<&'de str> {
-        // FIXME: if next line is an "append", build a temp String
         Ok(self.get_value()?)
     }
 
@@ -378,7 +400,18 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        visitor.visit_borrowed_str(self.parse_text()?)
+        let val = self.parse_text()?;
+        // FIXME: handle lists of strings
+        if !self.mappings.is_list() && self.mappings.check_key() {
+            let mut value = val.to_string();
+            while self.mappings.check_key() {
+                value.push('\n');
+                value.push_str(self.parse_text()?);
+            }
+            visitor.visit_str(&value)
+        } else {
+            visitor.visit_borrowed_str(val)
+        }
     }
 
     fn deserialize_string<V>(self, visitor: V) -> Result<V::Value>
@@ -392,14 +425,14 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        unimplemented!()
+        Err(Error::UnsupportedType("bytes"))
     }
 
     fn deserialize_byte_buf<V>(self, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unimplemented!()
+        Err(Error::UnsupportedType("byte_buf"))
     }
 
     fn deserialize_option<V>(self, visitor: V) -> Result<V::Value>
@@ -469,20 +502,26 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        self.mappings.push_stack();
+        self.mappings.push_stack(&[]);
         visitor.visit_map(self)
     }
 
     fn deserialize_struct<V>(
         self,
         _name: &'static str,
-        _fields: &'static [&'static str],
+        fields: &'static [&'static str],
         visitor: V,
     ) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        self.deserialize_map(visitor)
+        // Get default value for struct
+        if self.mappings.stack.len() > 0 {
+            let _v = self.get_value()?;
+            // FIXME: store default value somewhere
+        }
+        self.mappings.push_stack(fields);
+        visitor.visit_map(self)
     }
 
     fn deserialize_enum<V>(
@@ -494,7 +533,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        unimplemented!()
+        Err(Error::UnsupportedType("enum"))
     }
 
     fn deserialize_identifier<V>(self, visitor: V) -> Result<V::Value>
@@ -534,6 +573,7 @@ impl<'de> MapAccess<'de> for Deserializer<'de> {
         if self.mappings.check_indent() {
             seed.deserialize(&mut *self).map(Some)
         } else {
+            // FIXME: deserialize non-visited fields
             self.mappings.pop_stack();
             Ok(None)
         }
@@ -560,7 +600,7 @@ mod test {
     }
 
     #[test]
-    fn struct_a() -> Result<(), Box<Error>> {
+    fn integers() -> Result<(), Box<Error>> {
         let a = "b: false\nuint: 7\nint: -5\n";
         let expected = A {
             b: false,
@@ -585,10 +625,16 @@ mod test {
     }
 
     #[test]
-    fn struct_b() -> Result<(), Box<Error>> {
+    fn lists() -> Result<(), Box<Error>> {
         let b = "flags: false true true false\nvalues: Hello World\n";
         let expected = B {
             flags: vec![false, true, true, false],
+            values: vec!["Hello".to_string(), "World".to_string()],
+        };
+        assert_eq!(expected, from_str(b)?);
+        let b = "flags: true true\nflags: false false\nvalues: Hello\n      : World\n";
+        let expected = B {
+            flags: vec![true, true, false, false],
             values: vec!["Hello".to_string(), "World".to_string()],
         };
         assert_eq!(expected, from_str(b)?);
@@ -602,7 +648,7 @@ mod test {
     }
 
     #[test]
-    fn struct_c() -> Result<(), Box<Error>> {
+    fn floats() -> Result<(), Box<Error>> {
         let c = "float: +3.14159\ndouble: -123.456789e0\n";
         let expected = C {
             float: 3.14159,
@@ -631,6 +677,74 @@ mod test {
         assert!(from_str::<C>(c).is_err());
         let c = "float: .123_456\ndouble: 1.0\n";
         assert!(from_str::<C>(c).is_err());
+        Ok(())
+    }
+
+    #[derive(Deserialize, PartialEq, Debug)]
+    struct D {
+        struct_e: E,
+    }
+
+    #[derive(Deserialize, PartialEq, Debug)]
+    struct E {
+        flag: bool,
+    }
+
+    #[test]
+    fn nesting() -> Result<(), Box<Error>> {
+        let d = "struct_e:\n  flag: false\n";
+        let expected = D {
+            struct_e: { E { flag: false } }
+        };
+        assert_eq!(expected, from_str(d)?);
+        Ok(())
+    }
+
+    #[derive(Deserialize, PartialEq, Debug)]
+    struct F {
+        string: String,
+    }
+
+    #[test]
+    fn string_append() -> Result<(), Box<Error>> {
+        let f = "string: This is a long string\n      : for testing\n      : append definitions\n";
+        let expected = F { string: "This is a long string\nfor testing\nappend definitions".to_string() };
+        assert_eq!(expected, from_str(f)?);
+        Ok(())
+    }
+
+    #[derive(Deserialize, PartialEq, Debug)]
+    struct G {
+        strings: Vec<String>,
+    }
+
+    #[test]
+    fn string_list() -> Result<(), Box<Error>> {
+        let g = "strings: one two\n       : three four\n       :: fifth item\n";
+        let expected = G { strings: vec!["one".to_string(), "two".to_string(),
+            "three".to_string(), "four".to_string(), "fifth item".to_string() ]};
+        assert_eq!(expected, from_str(g)?);
+        Ok(())
+    }
+
+    #[derive(Deserialize, PartialEq, Debug)]
+    struct H {
+        flag: Option<bool>,
+        int: Option<i64>,
+        float: Option<f32>,
+    }
+
+    #[test]
+    fn options() -> Result<(), Box<Error>> {
+        let h = "flag: false\n";
+        let expected = H { flag: Some(false), int: None, float: None };
+        assert_eq!(expected, from_str(h)?);
+        let h = "int: 0o644\n";
+        let expected = H { flag: None, int: Some(0o644), float: None };
+        assert_eq!(expected, from_str(h)?);
+        let h = "float: -5e37\n";
+        let expected = H { flag: None, int: None, float: Some(-5e37) };
+        assert_eq!(expected, from_str(h)?);
         Ok(())
     }
 }
