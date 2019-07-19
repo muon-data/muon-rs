@@ -3,9 +3,8 @@
 // Copyright (c) 2019  Douglas Lau
 //
 use crate::error::{Error, Result};
-use crate::intparse::{self, Integer};
+use crate::parse::{self, Integer, Float};
 use crate::lines::{DefIter, Define, LineIter};
-use lexical::FromLexical;
 use serde::de::{
     self, Deserialize, DeserializeSeed, MapAccess, SeqAccess, Visitor,
 };
@@ -237,7 +236,7 @@ impl<'de> Deserializer<'de> {
     /// Parse an int value
     fn parse_int<T: Integer>(&mut self) -> Result<T> {
         let value = self.get_value()?;
-        if let Some(v) = intparse::from_str(value) {
+        if let Some(v) = parse::int(value) {
             Ok(v)
         } else {
             Err(Error::FailedParse(format!("int: {}", value)))
@@ -245,51 +244,14 @@ impl<'de> Deserializer<'de> {
     }
 
     /// Parse a float value
-    fn parse_float<T: FromLexical>(&mut self) -> Result<T> {
+    fn parse_float<T: Float>(&mut self) -> Result<T> {
         let value = self.get_value()?;
-        let res = lexical::try_parse(value);
-        match res {
-            Ok(v) => Ok(v),
-            Err(e) => parse_filtered_float(value, e),
+        if let Some(v) = parse::float(value) {
+            Ok(v)
+        } else {
+            Err(Error::FailedParse(format!("float: {}", value)))
         }
     }
-}
-
-/// Parse a float after filtering out underscores
-fn parse_filtered_float<T: FromLexical>(value: &str, e: lexical::Error)
-    -> Result<T>
-{
-    if let lexical::ErrorKind::InvalidDigit(_) = e.kind() {
-        if let Ok(v) = lexical::try_parse(filter_float(value)) {
-            return Ok(v)
-        }
-    }
-    Err(Error::FailedParse(format!("float: {}", value)))
-}
-
-/// Filter a float, removing valid underscores
-fn filter_float(value: &str) -> String {
-    let mut val = String::with_capacity(value.len());
-    for v in value.split('_') {
-        let before = val.as_bytes();
-        let len = before.len();
-        // Check character before underscore is a decimal digit
-        if len > 0 && !char::from(before[len-1]).is_digit(10) {
-            val.push('_')
-        }
-        let after = v.as_bytes();
-        let vlen = v.len();
-        // Allow starting with decimal point
-        if len == 0 && vlen > 0 && char::from(after[0]) == '.' {
-            val.push('0')
-        }
-        // Check character after underscore is a decimal digit
-        if vlen == 0 || !char::from(after[0]).is_digit(10) {
-            val.push('_')
-        }
-        val.push_str(v);
-    }
-    val
 }
 
 impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
@@ -321,9 +283,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        // i8 does not impl From<u8>, so use this as workaround
-        let v: i16 = self.parse_int()?;
-        visitor.visit_i8(v as i8)
+        visitor.visit_i8(self.parse_int()?)
     }
 
     fn deserialize_i16<V>(self, visitor: V) -> Result<V::Value>
@@ -739,8 +699,8 @@ mod test {
         let h = "flag: false\n";
         let expected = H { flag: Some(false), int: None, float: None };
         assert_eq!(expected, from_str(h)?);
-        let h = "int: 0o644\n";
-        let expected = H { flag: None, int: Some(0o644), float: None };
+        let h = "int: 0xfab\n";
+        let expected = H { flag: None, int: Some(0xFAB), float: None };
         assert_eq!(expected, from_str(h)?);
         let h = "float: -5e37\n";
         let expected = H { flag: None, int: None, float: Some(-5e37) };

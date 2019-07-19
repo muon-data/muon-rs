@@ -2,12 +2,11 @@
 //
 // Copyright (c) 2019  Douglas Lau
 //
-
 #![forbid(unsafe_code)]
 
 mod de;
 mod error;
-mod intparse;
+mod parse;
 mod lines;
 mod ser;
 

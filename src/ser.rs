@@ -16,26 +16,65 @@ impl Item for bool {
     }
 }
 
-macro_rules! item_itoa {
-    ($tp:ty) => {
-        impl Item for $tp {
-            fn write<W: fmt::Write>(&self, writer: &mut W) -> fmt::Result {
-                itoa::fmt(writer, *self)
-            }
-        }
-    };
+impl Item for i8 {
+    fn write<W: fmt::Write>(&self, writer: &mut W) -> fmt::Result {
+        writer.write_str(&*self.to_string())
+    }
 }
 
-item_itoa!(i8);
-item_itoa!(i16);
-item_itoa!(i32);
-item_itoa!(i64);
-item_itoa!(i128);
-item_itoa!(u8);
-item_itoa!(u16);
-item_itoa!(u32);
-item_itoa!(u64);
-item_itoa!(u128);
+impl Item for i16 {
+    fn write<W: fmt::Write>(&self, writer: &mut W) -> fmt::Result {
+        writer.write_str(&*self.to_string())
+    }
+}
+
+impl Item for i32 {
+    fn write<W: fmt::Write>(&self, writer: &mut W) -> fmt::Result {
+        writer.write_str(&*self.to_string())
+    }
+}
+
+impl Item for i64 {
+    fn write<W: fmt::Write>(&self, writer: &mut W) -> fmt::Result {
+        writer.write_str(&*self.to_string())
+    }
+}
+
+impl Item for i128 {
+    fn write<W: fmt::Write>(&self, writer: &mut W) -> fmt::Result {
+        writer.write_str(&*self.to_string())
+    }
+}
+
+impl Item for u8 {
+    fn write<W: fmt::Write>(&self, writer: &mut W) -> fmt::Result {
+        writer.write_str(&*self.to_string())
+    }
+}
+
+impl Item for u16 {
+    fn write<W: fmt::Write>(&self, writer: &mut W) -> fmt::Result {
+        writer.write_str(&*self.to_string())
+    }
+}
+
+impl Item for u32 {
+    fn write<W: fmt::Write>(&self, writer: &mut W) -> fmt::Result {
+        writer.write_str(&*self.to_string())
+    }
+}
+
+impl Item for u64 {
+    fn write<W: fmt::Write>(&self, writer: &mut W) -> fmt::Result {
+        writer.write_str(&*self.to_string())
+    }
+}
+
+impl Item for u128 {
+    fn write<W: fmt::Write>(&self, writer: &mut W) -> fmt::Result {
+        writer.write_str(&*self.to_string())
+    }
+}
 
 impl Item for f32 {
     fn write<W: fmt::Write>(&self, writer: &mut W) -> fmt::Result {
