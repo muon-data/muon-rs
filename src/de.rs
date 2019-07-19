@@ -13,10 +13,16 @@ use std::iter::Peekable;
 /// Dictionary for mapping stack
 #[derive(Debug)]
 struct Dict<'a> {
+    /// Current key
     key: Option<&'a str>,
+    /// List flag
     list: bool,
+    /// Field names
     fields: &'static [&'static str],
+    /// Flags for visited fields (same length as fields)
     visited: Vec<bool>,
+    /// Flag to indicate finishing (cleaning up unvisited fields)
+    finishing: bool,
 }
 
 /// Iterator for key/value mappings
@@ -71,7 +77,8 @@ impl<'a> MappingIter<'a> {
     /// Push onto the mapping stack
     fn push_stack(&mut self, fields: &'static [&'static str]) {
         let visited = vec![false; fields.len()];
-        let d = Dict { key: None, list: false, fields, visited };
+        let finishing = false;
+        let d = Dict { key: None, list: false, fields, visited, finishing };
         self.stack.push(d);
     }
 
@@ -82,14 +89,12 @@ impl<'a> MappingIter<'a> {
 
     /// Set the current key on stack
     fn set_key(&mut self, key: Option<&'a str>) {
-        let len = self.stack.len();
-        if len > 0 {
-            let dict = &mut self.stack[len - 1];
+        if let Some(dict) = self.stack.last_mut() {
             dict.key = key;
             if let Some(f) = key {
                 for i in 0..dict.fields.len() {
                     if dict.fields[i] == f {
-                        dict.visited[i] = true;
+                        dict.visited[i] = true
                     }
                 }
             }
@@ -98,16 +103,18 @@ impl<'a> MappingIter<'a> {
 
     /// Set the top of stack to a list
     fn set_list(&mut self, list: bool) {
-        let len = self.stack.len();
-        if len > 0 {
-            self.stack[len - 1].list = list;
+        if let Some(dict) = self.stack.last_mut() {
+            dict.list = list
         }
     }
 
     /// Check if the current define is a list
     fn is_list(&self) -> bool {
-        let ln = self.stack.len();
-        ln > 0 && self.stack[ln - 1].list
+        if let Some(dict) = self.stack.last() {
+            dict.list
+        } else {
+            false
+        }
     }
 
     /// Get the next define in a list
@@ -140,17 +147,14 @@ impl<'a> MappingIter<'a> {
 
     /// Check that key matches
     fn check_key(&mut self) -> bool {
-        let ln = self.stack.len();
-        if ln > 0 {
-            if let Some(k) = self.stack[ln - 1].key {
+        if let Some(dict) = self.stack.last() {
+            if let Some(k) = dict.key {
                 if let Some(Define::Valid(_, key, _)) = self.peek() {
-                    return key == k;
+                    return key == k
                 }
             }
-            false
-        } else {
-            false
         }
+        false
     }
 }
 
@@ -217,7 +221,7 @@ impl<'de> Deserializer<'de> {
         let text = self.parse_text()?;
         if text.len() == 1 {
             if let Some(c) = text.chars().next() {
-                return Ok(c);
+                return Ok(c)
             }
         }
         Err(Error::FailedParse(format!("char: {}", text)))
@@ -399,6 +403,11 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
+        if let Some(dict) = self.mappings.stack.last() {
+            if dict.finishing {
+                return visitor.visit_none()
+            }
+        }
         visitor.visit_some(self)
     }
 
@@ -500,6 +509,16 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
+        if let Some(dict) = self.mappings.stack.last_mut() {
+            if dict.finishing {
+                for i in 0..dict.fields.len() {
+                    if !dict.visited[i] {
+                        dict.visited[i] = true;
+                        return visitor.visit_borrowed_str(dict.fields[i])
+                    }
+                }
+            }
+        }
         let key = self.peek_key()?;
         self.mappings.set_key(Some(key));
         visitor.visit_borrowed_str(key)
@@ -533,7 +552,15 @@ impl<'de> MapAccess<'de> for Deserializer<'de> {
         if self.mappings.check_indent() {
             seed.deserialize(&mut *self).map(Some)
         } else {
-            // FIXME: deserialize non-visited fields
+            if let Some(dict) = self.mappings.stack.last_mut() {
+                for i in 0..dict.fields.len() {
+                    if !dict.visited[i] {
+                        dict.finishing = true;
+                        return seed.deserialize(&mut *self).map(Some)
+                    }
+                }
+                dict.finishing = false;
+            }
             self.mappings.pop_stack();
             Ok(None)
         }
@@ -582,20 +609,23 @@ mod test {
     struct B {
         flags: Vec<bool>,
         values: Vec<String>,
+        ints: [i16; 3],
     }
 
     #[test]
     fn lists() -> Result<(), Box<Error>> {
-        let b = "flags: false true true false\nvalues: Hello World\n";
+        let b = "flags: false true true false\nvalues: Hello World\nints: 1 2 -5\n";
         let expected = B {
             flags: vec![false, true, true, false],
             values: vec!["Hello".to_string(), "World".to_string()],
+            ints: [1, 2, -5],
         };
         assert_eq!(expected, from_str(b)?);
-        let b = "flags: true true\nflags: false false\nvalues: Hello\n      : World\n";
+        let b = "flags: true true\nflags: false false\nints: 30 -25 0\n";
         let expected = B {
             flags: vec![true, true, false, false],
-            values: vec!["Hello".to_string(), "World".to_string()],
+            values: vec![],
+            ints: [30, -25, 0],
         };
         assert_eq!(expected, from_str(b)?);
         Ok(())
