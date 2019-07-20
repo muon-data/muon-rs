@@ -677,48 +677,59 @@ mod test {
 
     #[derive(Deserialize, PartialEq, Debug)]
     struct E {
+        struct_f: F,
         flag: bool,
+    }
+
+    #[derive(Deserialize, PartialEq, Debug)]
+    struct F {
+        int: i64,
     }
 
     #[test]
     fn nesting() -> Result<(), Box<Error>> {
-        let d = "struct_e:\n  flag: false\n";
+        let d = "struct_e:\n  struct_f:\n    int: 987_654_321\n  flag: false\n";
         let expected = D {
-            struct_e: { E { flag: false } }
+            struct_e: { E { struct_f: F { int: 987654321 }, flag: false } }
+        };
+        assert_eq!(expected, from_str(d)?);
+        let d = "struct_e:\n  flag: true\n  struct_f:\n    int: -12_34_56\n";
+        let expected = D {
+            struct_e: { E { struct_f: F { int: -123456 }, flag: true } }
         };
         assert_eq!(expected, from_str(d)?);
         Ok(())
     }
 
     #[derive(Deserialize, PartialEq, Debug)]
-    struct F {
+    struct G {
         string: String,
     }
 
     #[test]
     fn string_append() -> Result<(), Box<Error>> {
-        let f = "string: This is a long string\n      : for testing\n      : append definitions\n";
-        let expected = F { string: "This is a long string\nfor testing\nappend definitions".to_string() };
-        assert_eq!(expected, from_str(f)?);
-        Ok(())
-    }
-
-    #[derive(Deserialize, PartialEq, Debug)]
-    struct G {
-        strings: Vec<String>,
-    }
-
-    #[test]
-    fn string_list() -> Result<(), Box<Error>> {
-        let g = "strings: one two\n       : three four\n       :: fifth item\n";
-        let expected = G { strings: vec!["one".to_string(), "two".to_string(),
-            "three".to_string(), "four".to_string(), "fifth item".to_string() ]};
+        let g = "string: This is a long string\n      : for testing\n      : append definitions\n";
+        let expected = G { string: "This is a long string\nfor testing\nappend definitions".to_string() };
         assert_eq!(expected, from_str(g)?);
         Ok(())
     }
 
     #[derive(Deserialize, PartialEq, Debug)]
     struct H {
+        strings: Vec<String>,
+    }
+
+    #[test]
+    fn string_list() -> Result<(), Box<Error>> {
+        let h = "strings: one two\n       : three four\n       :: fifth item\n";
+        let expected = H { strings: vec!["one".to_string(), "two".to_string(),
+            "three".to_string(), "four".to_string(), "fifth item".to_string() ]};
+        assert_eq!(expected, from_str(h)?);
+        Ok(())
+    }
+
+    #[derive(Deserialize, PartialEq, Debug)]
+    struct I {
         flag: Option<bool>,
         int: Option<i64>,
         float: Option<f32>,
@@ -726,15 +737,15 @@ mod test {
 
     #[test]
     fn options() -> Result<(), Box<Error>> {
-        let h = "flag: false\n";
-        let expected = H { flag: Some(false), int: None, float: None };
-        assert_eq!(expected, from_str(h)?);
-        let h = "int: 0xfab\n";
-        let expected = H { flag: None, int: Some(0xFAB), float: None };
-        assert_eq!(expected, from_str(h)?);
-        let h = "float: -5e37\n";
-        let expected = H { flag: None, int: None, float: Some(-5e37) };
-        assert_eq!(expected, from_str(h)?);
+        let i = "flag: false\n";
+        let expected = I { flag: Some(false), int: None, float: None };
+        assert_eq!(expected, from_str(i)?);
+        let i = "int: 0xfab\n";
+        let expected = I { flag: None, int: Some(0xFAB), float: None };
+        assert_eq!(expected, from_str(i)?);
+        let i = "float: -5e37\n";
+        let expected = I { flag: None, int: None, float: Some(-5e37) };
+        assert_eq!(expected, from_str(i)?);
         Ok(())
     }
 }
