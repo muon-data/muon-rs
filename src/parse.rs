@@ -66,7 +66,7 @@ fn sanitize_num(value: &str, radix: u32) -> String {
         }
         // Check character after underscore is a decimal digit
         if let Some(after) = v.as_bytes().first() {
-            if !char::from(*after).is_digit(radix) {
+            if *after != b'-' && !char::from(*after).is_digit(radix) {
                 val.push('_')
             }
         } else {
@@ -98,6 +98,7 @@ mod test {
             Some(0x10000000000000000u128)
         );
         assert_eq!(int("1_234_567_890"), Some(1234567890));
+        assert_eq!(int("-12_34_56"), Some(-123456));
         assert_eq!(int("0b_1111_0000_1111"), Some(0xF0F));
         assert_eq!(int("0x123_FED"), Some(0x123_FED));
         assert_eq!(int::<u8>("0.0"), None);
