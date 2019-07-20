@@ -748,4 +748,26 @@ mod test {
         assert_eq!(expected, from_str(i)?);
         Ok(())
     }
+
+    #[derive(Deserialize, PartialEq, Debug)]
+    struct J {
+        struct_k: Vec<K>,
+    }
+
+    #[derive(Deserialize, PartialEq, Debug)]
+    struct K {
+        name: String,
+    }
+
+    #[test]
+    fn dict_list() -> Result<(), Box<Error>> {
+        let j = "struct_k:\n   name: Genghis Khan\nstruct_k:\n   name: Josef Stalin\nstruct_k:\n   name: Dudley Doo-Right\n";
+        let expected = J { struct_k: vec![
+            K { name: "Genghis Khan".to_string() },
+            K { name: "Josef Stalin".to_string() },
+            K { name: "Dudley Doo-Right".to_string() },
+        ] };
+        assert_eq!(expected, from_str(j)?);
+        Ok(())
+    }
 }

@@ -28,3 +28,22 @@ fn derived_de_ser() -> muon::Result<()> {
     assert_eq!(s, ss);
     Ok(())
 }
+
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
+struct B {
+    people: Vec<C>,
+}
+
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
+struct C {
+    name: String,
+}
+
+#[test]
+fn dict_list() -> muon::Result<()> {
+    let s = "people:\n   name: Genghis Khan\npeople:\n   name: Josef Stalin\npeople:\n   name: Dudley Doo-Right\n";
+    let b: B = muon::from_str(&s)?;
+    let ss = muon::to_string(&b)?;
+    assert_eq!(ss, "people:\n  name: Genghis Khan\npeople:\n  name: Josef Stalin\npeople:\n  name: Dudley Doo-Right\n");
+    Ok(())
+}
