@@ -2,22 +2,72 @@
 //
 // Copyright (c) 2019  Douglas Lau
 //
-use num_traits::Num;
 use std::str::FromStr;
 
 /// Marker trait for integer types
-pub trait Integer: FromStr + Num { }
+pub trait Integer: FromStr {
+    fn from_str_radix(src: &str, radix: u32) -> Option<Self>;
+}
 
-impl Integer for i8 {}
-impl Integer for u8 {}
-impl Integer for i16 {}
-impl Integer for u16 {}
-impl Integer for i32 {}
-impl Integer for u32 {}
-impl Integer for i64 {}
-impl Integer for u64 {}
-impl Integer for i128 {}
-impl Integer for u128 {}
+impl Integer for i8 {
+    fn from_str_radix(src: &str, radix: u32) -> Option<Self> {
+        Self::from_str_radix(src, radix).ok()
+    }
+}
+
+impl Integer for u8 {
+    fn from_str_radix(src: &str, radix: u32) -> Option<Self> {
+        Self::from_str_radix(src, radix).ok()
+    }
+}
+
+impl Integer for i16 {
+    fn from_str_radix(src: &str, radix: u32) -> Option<Self> {
+        Self::from_str_radix(src, radix).ok()
+    }
+}
+
+impl Integer for u16 {
+    fn from_str_radix(src: &str, radix: u32) -> Option<Self> {
+        Self::from_str_radix(src, radix).ok()
+    }
+}
+
+impl Integer for i32 {
+    fn from_str_radix(src: &str, radix: u32) -> Option<Self> {
+        Self::from_str_radix(src, radix).ok()
+    }
+}
+
+impl Integer for u32 {
+    fn from_str_radix(src: &str, radix: u32) -> Option<Self> {
+        Self::from_str_radix(src, radix).ok()
+    }
+}
+
+impl Integer for i64 {
+    fn from_str_radix(src: &str, radix: u32) -> Option<Self> {
+        Self::from_str_radix(src, radix).ok()
+    }
+}
+
+impl Integer for u64 {
+    fn from_str_radix(src: &str, radix: u32) -> Option<Self> {
+        Self::from_str_radix(src, radix).ok()
+    }
+}
+
+impl Integer for i128 {
+    fn from_str_radix(src: &str, radix: u32) -> Option<Self> {
+        Self::from_str_radix(src, radix).ok()
+    }
+}
+
+impl Integer for u128 {
+    fn from_str_radix(src: &str, radix: u32) -> Option<Self> {
+        Self::from_str_radix(src, radix).ok()
+    }
+}
 
 /// Marker trait for float types
 pub trait Float: FromStr { }
@@ -35,13 +85,13 @@ pub fn int<T: Integer>(v: &str) -> Option<T> {
 /// Fallback for integer parsing
 fn int_fallback<T: Integer>(v: &str) -> Option<T> {
     if v.starts_with("0b_") {
-        T::from_str_radix(&sanitize_num(&v[3..], 2), 2).ok()
+        T::from_str_radix(&sanitize_num(&v[3..], 2), 2)
     } else if v.starts_with("0b") {
-        T::from_str_radix(&sanitize_num(&v[2..], 2), 2).ok()
+        T::from_str_radix(&sanitize_num(&v[2..], 2), 2)
     } else if v.starts_with("0x_") {
-        T::from_str_radix(&sanitize_num(&v[3..], 16), 16).ok()
+        T::from_str_radix(&sanitize_num(&v[3..], 16), 16)
     } else if v.starts_with("0x") {
-        T::from_str_radix(&sanitize_num(&v[2..], 16), 16).ok()
+        T::from_str_radix(&sanitize_num(&v[2..], 16), 16)
     } else {
         T::from_str(&sanitize_num(v, 10)).ok()
     }
