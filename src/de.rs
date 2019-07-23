@@ -6,9 +6,12 @@ use crate::error::{Error, Result};
 use crate::parse::{self, Integer, Float};
 use crate::lines::{DefIter, Define, LineIter};
 use serde::de::{
-    self, Deserialize, DeserializeSeed, MapAccess, SeqAccess, Visitor,
+    self, Deserialize, DeserializeOwned, DeserializeSeed, MapAccess, SeqAccess,
+    Visitor,
 };
+use std::io::Read;
 use std::iter::Peekable;
+use std::str;
 
 /// Dictionary for mapping stack
 #[derive(Debug)]
@@ -178,6 +181,25 @@ where
     let mut deserializer = Deserializer::from_str(s);
     let t = T::deserialize(&mut deserializer)?;
     Ok(t)
+}
+
+/// Deserialize a MuON document from a byte slice
+pub fn from_slice<'a, T>(v: &'a [u8]) -> Result<T>
+where
+    T: Deserialize<'a>,
+{
+    from_str(str::from_utf8(v)?)
+}
+
+/// Deserialize a MuON document from a reader
+pub fn from_reader<R, T>(mut reader: R) -> Result<T>
+where
+    R: Read,
+    T: DeserializeOwned,
+{
+    let mut s = String::new();
+    reader.read_to_string(&mut s)?;
+    from_str(&s)
 }
 
 impl<'de> Deserializer<'de> {

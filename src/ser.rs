@@ -5,6 +5,7 @@
 use crate::error::{Error, Result};
 use serde::ser::{self, Serialize};
 use std::fmt;
+use std::io::Write;
 
 trait Item {
     fn write<W: fmt::Write>(&self, writer: &mut W) -> fmt::Result;
@@ -633,7 +634,26 @@ where
     Ok(serializer.output)
 }
 
-// FIXME: add to_bytes, to_writer
+/// Serialize a value to a Vec of bytes in MuON format
+pub fn to_vec<T>(value: &T) -> Result<Vec<u8>>
+where
+    T: Serialize,
+{
+    let mut serializer = Serializer::new(2);
+    value.serialize(&mut serializer)?;
+    serializer.write_linefeed();
+    Ok(serializer.output.into_bytes())
+}
+
+/// Serialize a value to a writer in MuON format
+pub fn to_writer<W, T>(mut writer: W, value: &T) -> Result<()>
+where
+    W: Write,
+    T: Serialize,
+{
+    writer.write(&to_vec(value)?)?;
+    Ok(())
+}
 
 #[cfg(test)]
 mod test {
