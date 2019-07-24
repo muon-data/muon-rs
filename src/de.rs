@@ -10,32 +10,98 @@ use serde::de::{
     Visitor,
 };
 use std::io::Read;
-use std::iter::Peekable;
 use std::str;
+
+/// Dictionary mapping state
+#[derive(Debug)]
+enum DictState {
+    /// Starting dict mapping
+    Start,
+    /// Visiting fields of mapping
+    Visit,
+    /// Clean up dict mapping
+    Cleanup,
+}
 
 /// Dictionary for mapping stack
 #[derive(Debug)]
 struct Dict<'a> {
-    /// Current key
-    key: Option<&'a str>,
-    /// List flag
-    list: bool,
     /// Field names
     fields: &'static [&'static str],
     /// Flags for visited fields (same length as fields)
     visited: Vec<bool>,
-    /// Flag to indicate finishing (cleaning up unvisited fields)
-    finishing: bool,
+    /// Dictionary mapping state
+    state: DictState,
+    /// Current key (should match one field)
+    key: Option<&'a str>,
+    /// List flag (applies to current key)
+    list: bool,
+}
+
+impl<'a> Dict<'a> {
+
+    /// Create a new Dict mapping
+    fn new(is_root: bool, fields: &'static [&'static str]) -> Self {
+        let visited = vec![false; fields.len()];
+        // root dict does not have a Define, so doesn't need Start state
+        let state = if is_root { DictState::Visit } else { DictState::Start };
+        Dict { fields, visited, state, key: None, list: false }
+    }
+
+    /// If in Start state, get first field
+    fn start_first(&mut self) -> Option<&'a str> {
+        let first = match (&self.state, self.fields.first()) {
+            (DictState::Start, Some(field)) => Some(*field),
+            _ => None,
+        };
+        self.state = DictState::Visit;
+        first
+    }
+
+    /// Visit one field
+    fn visit(&mut self, key: Option<&'a str>) {
+        self.key = key;
+        if let Some(f) = key {
+            for i in 0..self.fields.len() {
+                if self.fields[i] == f {
+                    self.visited[i] = true
+                }
+            }
+        }
+    }
+
+    /// Check for any unvisited fields
+    fn has_unvisited(&self) -> bool {
+        for i in 0..self.fields.len() {
+            if !self.visited[i] {
+                return true
+            }
+        }
+        false
+    }
+
+    /// Cleanup state for one field
+    fn cleanup_visit(&mut self) -> Option<&'static str> {
+        if let DictState::Cleanup = self.state {
+            for i in 0..self.fields.len() {
+                if !self.visited[i] {
+                    self.visited[i] = true;
+                    return Some(self.fields[i])
+                }
+            }
+        }
+        None
+    }
 }
 
 /// Iterator for key/value mappings
 struct MappingIter<'a> {
     /// Define iterator
-    defs: Peekable<DefIter<'a>>,
-    /// Stack of nested keys and list flags
-    stack: Vec<Dict<'a>>,
-    /// Current define (for list handling)
+    defs: DefIter<'a>,
+    /// Current define
     define: Option<(Define<'a>, bool)>,
+    /// Stack of nested dicts
+    stack: Vec<Dict<'a>>,
 }
 
 impl<'a> Iterator for MappingIter<'a> {
@@ -59,10 +125,10 @@ impl<'a> Iterator for MappingIter<'a> {
 impl<'a> MappingIter<'a> {
     /// Create a new key/value mapping iterator
     fn new(iter: LineIter<'a>) -> Self {
-        let defs = DefIter::new(iter).peekable();
-        let stack = vec![];
+        let defs = DefIter::new(iter);
         let define = None;
-        MappingIter { defs, stack, define }
+        let stack = vec![];
+        MappingIter { defs, define, stack }
     }
 
     /// Peek at next define
@@ -74,49 +140,6 @@ impl<'a> MappingIter<'a> {
             Some(define)
         } else {
             None
-        }
-    }
-
-    /// Push onto the mapping stack
-    fn push_stack(&mut self, fields: &'static [&'static str]) {
-        let visited = vec![false; fields.len()];
-        let finishing = false;
-        let d = Dict { key: None, list: false, fields, visited, finishing };
-        self.stack.push(d);
-    }
-
-    /// Pop from the mapping stack
-    fn pop_stack(&mut self) {
-        self.stack.pop();
-    }
-
-    /// Set the current key on stack
-    fn set_key(&mut self, key: Option<&'a str>) {
-        if let Some(dict) = self.stack.last_mut() {
-            dict.key = key;
-            if let Some(f) = key {
-                for i in 0..dict.fields.len() {
-                    if dict.fields[i] == f {
-                        dict.visited[i] = true
-                    }
-                }
-            }
-        }
-    }
-
-    /// Set the top of stack to a list
-    fn set_list(&mut self, list: bool) {
-        if let Some(dict) = self.stack.last_mut() {
-            dict.list = list
-        }
-    }
-
-    /// Check if the current define is a list
-    fn is_list(&self) -> bool {
-        if let Some(dict) = self.stack.last() {
-            dict.list
-        } else {
-            false
         }
     }
 
@@ -136,6 +159,65 @@ impl<'a> MappingIter<'a> {
             }
         } else {
             None
+        }
+    }
+
+    /// Push onto the mapping stack
+    fn push_stack(&mut self, fields: &'static [&'static str]) {
+        let is_root = self.stack.len() == 0;
+        self.stack.push(Dict::new(is_root, fields))
+    }
+
+    /// Pop from the mapping stack
+    fn pop_stack(&mut self) {
+        self.stack.pop();
+    }
+
+    /// Check if dict is in Start state
+    fn check_start(&mut self) {
+        let indent = self.stack.len();
+        if let Some(dict) = self.stack.last_mut() {
+            if let Some(key) = dict.start_first() {
+                if let Some((Define::Valid(_, _, v), _)) = self.define.take() {
+                    if v.len() > 0 && indent > 0 {
+                        self.define = Some((Define::Valid(indent - 1, key, v),
+                            false))
+                    }
+                }
+            }
+        }
+    }
+
+    /// Check if cleanup is needed
+    fn check_cleanup(&mut self) -> bool {
+        if let Some(dict) = self.stack.last_mut() {
+            dict.state = DictState::Cleanup;
+            dict.has_unvisited()
+        } else {
+            false
+        }
+    }
+
+    /// Set the current key on stack
+    fn set_key(&mut self, key: Option<&'a str>) {
+        if let Some(dict) = self.stack.last_mut() {
+            dict.visit(key)
+        }
+    }
+
+    /// Set the top of stack to a list
+    fn set_list(&mut self, list: bool) {
+        if let Some(dict) = self.stack.last_mut() {
+            dict.list = list
+        }
+    }
+
+    /// Check if the current define is a list
+    fn is_list(&self) -> bool {
+        if let Some(dict) = self.stack.last() {
+            dict.list
+        } else {
+            false
         }
     }
 
@@ -173,7 +255,7 @@ impl<'de> Deserializer<'de> {
     }
 }
 
-/// Create a MuON deserializer from a string slice
+/// Deserialize a MuON document from a string slice
 pub fn from_str<'a, T>(s: &'a str) -> Result<T>
 where
     T: Deserialize<'a>,
@@ -203,9 +285,10 @@ where
 }
 
 impl<'de> Deserializer<'de> {
-    /// Peek at current define
-    fn peek_define(&mut self) -> Result<Define<'de>> {
-        match self.mappings.peek() {
+
+    /// Parse a define into a result
+    fn define_result(define: Option<Define>) -> Result<Define> {
+        match define {
             Some(Define::Invalid(e, ln)) => {
                 Err(Error::FailedParse(format!("{:?} {}", e, ln)))
             }
@@ -216,7 +299,7 @@ impl<'de> Deserializer<'de> {
 
     /// Peek the current key
     fn peek_key(&mut self) -> Result<&'de str> {
-        match self.peek_define()? {
+        match Deserializer::define_result(self.mappings.peek())? {
             Define::Valid(_, k, _) => Ok(k),
             _ => unreachable!(),
         }
@@ -224,12 +307,9 @@ impl<'de> Deserializer<'de> {
 
     /// Get the current value
     fn get_value(&mut self) -> Result<&'de str> {
-        match self.mappings.next() {
-            Some(Define::Invalid(e, ln)) => {
-                Err(Error::FailedParse(format!("{:?} {}", e, ln)))
-            }
-            Some(Define::Valid(_, _, v)) => Ok(v),
-            None => Err(Error::UnexpectedEndOfInput),
+        match Deserializer::define_result(self.mappings.next())? {
+            Define::Valid(_, _, v) => Ok(v),
+            _ => unreachable!(),
         }
     }
 
@@ -288,7 +368,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: Visitor<'de>,
     {
         // FIXME: use schema to know what types to return
-        unimplemented!();
+        Err(Error::UnsupportedType("Schema support not implemented"))
     }
 
     fn deserialize_ignored_any<V>(self, visitor: V) -> Result<V::Value>
@@ -426,7 +506,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: Visitor<'de>,
     {
         if let Some(dict) = self.mappings.stack.last() {
-            if dict.finishing {
+            if let DictState::Cleanup = dict.state {
                 return visitor.visit_none()
             }
         }
@@ -506,11 +586,6 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        // Get default value for struct
-        if self.mappings.stack.len() > 0 {
-            let _v = self.get_value()?;
-            // FIXME: store default value somewhere
-        }
         self.mappings.push_stack(fields);
         visitor.visit_map(self)
     }
@@ -532,13 +607,8 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: Visitor<'de>,
     {
         if let Some(dict) = self.mappings.stack.last_mut() {
-            if dict.finishing {
-                for i in 0..dict.fields.len() {
-                    if !dict.visited[i] {
-                        dict.visited[i] = true;
-                        return visitor.visit_borrowed_str(dict.fields[i])
-                    }
-                }
+            if let Some(field) = dict.cleanup_visit() {
+                return visitor.visit_borrowed_str(field)
             }
         }
         let key = self.peek_key()?;
@@ -571,18 +641,10 @@ impl<'de> MapAccess<'de> for Deserializer<'de> {
     where
         K: DeserializeSeed<'de>,
     {
-        if self.mappings.check_indent() {
+        self.mappings.check_start();
+        if self.mappings.check_indent() || self.mappings.check_cleanup() {
             seed.deserialize(&mut *self).map(Some)
         } else {
-            if let Some(dict) = self.mappings.stack.last_mut() {
-                for i in 0..dict.fields.len() {
-                    if !dict.visited[i] {
-                        dict.finishing = true;
-                        return seed.deserialize(&mut *self).map(Some)
-                    }
-                }
-                dict.finishing = false;
-            }
             self.mappings.pop_stack();
             Ok(None)
         }
@@ -743,9 +805,10 @@ mod test {
 
     #[test]
     fn string_list() -> Result<(), Box<Error>> {
-        let h = "strings: one two\n       : three four\n       :: fifth item\n";
+        let h = "strings: one two\n       : three four\n       :: fifth item\n       : sixth\n";
         let expected = H { strings: vec!["one".to_string(), "two".to_string(),
-            "three".to_string(), "four".to_string(), "fifth item".to_string() ]};
+            "three".to_string(), "four".to_string(), "fifth item".to_string(),
+            "sixth".to_string() ]};
         assert_eq!(expected, from_str(h)?);
         Ok(())
     }
@@ -773,21 +836,34 @@ mod test {
 
     #[derive(Deserialize, PartialEq, Debug)]
     struct J {
-        struct_k: Vec<K>,
+        person: Vec<K>,
     }
 
     #[derive(Deserialize, PartialEq, Debug)]
     struct K {
         name: String,
+        score: i32,
     }
 
     #[test]
     fn dict_list() -> Result<(), Box<Error>> {
-        let j = "struct_k:\n   name: Genghis Khan\nstruct_k:\n   name: Josef Stalin\nstruct_k:\n   name: Dudley Doo-Right\n";
-        let expected = J { struct_k: vec![
-            K { name: "Genghis Khan".to_string() },
-            K { name: "Josef Stalin".to_string() },
-            K { name: "Dudley Doo-Right".to_string() },
+        let j = "person:\n   name: Genghis Khan\n   score: 500\nperson:\n   name: Josef Stalin\n   score: 250\nperson:\n   name: Dudley Doo-Right\n   score: 800\n";
+        let expected = J { person: vec![
+            K { name: "Genghis Khan".to_string(), score: 500 },
+            K { name: "Josef Stalin".to_string(), score: 250 },
+            K { name: "Dudley Doo-Right".to_string(), score: 800 },
+        ] };
+        assert_eq!(expected, from_str(j)?);
+        Ok(())
+    }
+
+    #[test]
+    fn dict_default() -> Result<(), Box<Error>> {
+        let j = "person: Immanuel Kant\n  score: 600\nperson: Arthur Schopenhauer\n  score: 225\nperson: René Descartes\n  score: 400\n";
+        let expected = J { person: vec![
+            K { name: "Immanuel Kant".to_string(), score: 600 },
+            K { name: "Arthur Schopenhauer".to_string(), score: 225 },
+            K { name: "René Descartes".to_string(), score: 400 },
         ] };
         assert_eq!(expected, from_str(j)?);
         Ok(())
