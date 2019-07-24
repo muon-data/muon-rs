@@ -3,8 +3,8 @@
 // Copyright (c) 2019  Douglas Lau
 //
 use crate::error::{Error, Result};
-use crate::parse::{self, Integer, Float};
 use crate::lines::{DefIter, Define, LineIter};
+use crate::parse::{self, Float, Integer};
 use serde::de::{
     self, Deserialize, DeserializeOwned, DeserializeSeed, MapAccess, SeqAccess,
     Visitor,
@@ -39,13 +39,22 @@ struct Dict<'a> {
 }
 
 impl<'a> Dict<'a> {
-
     /// Create a new Dict mapping
     fn new(is_root: bool, fields: &'static [&'static str]) -> Self {
         let visited = vec![false; fields.len()];
         // root dict does not have a Define, so doesn't need Start state
-        let state = if is_root { DictState::Visit } else { DictState::Start };
-        Dict { fields, visited, state, key: None, list: false }
+        let state = if is_root {
+            DictState::Visit
+        } else {
+            DictState::Start
+        };
+        Dict {
+            fields,
+            visited,
+            state,
+            key: None,
+            list: false,
+        }
     }
 
     /// If in Start state, get first field
@@ -74,7 +83,7 @@ impl<'a> Dict<'a> {
     fn has_unvisited(&self) -> bool {
         for i in 0..self.fields.len() {
             if !self.visited[i] {
-                return true
+                return true;
             }
         }
         false
@@ -86,7 +95,7 @@ impl<'a> Dict<'a> {
             for i in 0..self.fields.len() {
                 if !self.visited[i] {
                     self.visited[i] = true;
-                    return Some(self.fields[i])
+                    return Some(self.fields[i]);
                 }
             }
         }
@@ -128,7 +137,11 @@ impl<'a> MappingIter<'a> {
         let defs = DefIter::new(iter);
         let define = None;
         let stack = vec![];
-        MappingIter { defs, define, stack }
+        MappingIter {
+            defs,
+            define,
+            stack,
+        }
     }
 
     /// Peek at next define
@@ -180,8 +193,8 @@ impl<'a> MappingIter<'a> {
             if let Some(key) = dict.start_first() {
                 if let Some((Define::Valid(_, _, v), _)) = self.define.take() {
                     if v.len() > 0 && indent > 0 {
-                        self.define = Some((Define::Valid(indent - 1, key, v),
-                            false))
+                        self.define =
+                            Some((Define::Valid(indent - 1, key, v), false))
                     }
                 }
             }
@@ -235,7 +248,7 @@ impl<'a> MappingIter<'a> {
         if let Some(dict) = self.stack.last() {
             if let Some(k) = dict.key {
                 if let Some(Define::Valid(_, key, _)) = self.peek() {
-                    return key == k
+                    return key == k;
                 }
             }
         }
@@ -285,7 +298,6 @@ where
 }
 
 impl<'de> Deserializer<'de> {
-
     /// Parse a define into a result
     fn define_result(define: Option<Define>) -> Result<Define> {
         match define {
@@ -323,7 +335,7 @@ impl<'de> Deserializer<'de> {
         let text = self.parse_text()?;
         if text.len() == 1 {
             if let Some(c) = text.chars().next() {
-                return Ok(c)
+                return Ok(c);
             }
         }
         Err(Error::FailedParse(format!("char: {}", text)))
@@ -507,7 +519,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     {
         if let Some(dict) = self.mappings.stack.last() {
             if let DictState::Cleanup = dict.state {
-                return visitor.visit_none()
+                return visitor.visit_none();
             }
         }
         visitor.visit_some(self)
@@ -608,7 +620,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     {
         if let Some(dict) = self.mappings.stack.last_mut() {
             if let Some(field) = dict.cleanup_visit() {
-                return visitor.visit_borrowed_str(field)
+                return visitor.visit_borrowed_str(field);
             }
         }
         let key = self.peek_key()?;
@@ -698,7 +710,8 @@ mod test {
 
     #[test]
     fn lists() -> Result<(), Box<Error>> {
-        let b = "flags: false true true false\nvalues: Hello World\nints: 1 2 -5\n";
+        let b =
+            "flags: false true true false\nvalues: Hello World\nints: 1 2 -5\n";
         let expected = B {
             flags: vec![false, true, true, false],
             values: vec!["Hello".to_string(), "World".to_string()],
@@ -774,12 +787,22 @@ mod test {
     fn nesting() -> Result<(), Box<Error>> {
         let d = "struct_e:\n  struct_f:\n    int: 987_654_321\n  flag: false\n";
         let expected = D {
-            struct_e: { E { struct_f: F { int: 987654321 }, flag: false } }
+            struct_e: {
+                E {
+                    struct_f: F { int: 987654321 },
+                    flag: false,
+                }
+            },
         };
         assert_eq!(expected, from_str(d)?);
         let d = "struct_e:\n  flag: true\n  struct_f:\n    int: -12_34_56\n";
         let expected = D {
-            struct_e: { E { struct_f: F { int: -123456 }, flag: true } }
+            struct_e: {
+                E {
+                    struct_f: F { int: -123456 },
+                    flag: true,
+                }
+            },
         };
         assert_eq!(expected, from_str(d)?);
         Ok(())
@@ -793,7 +816,10 @@ mod test {
     #[test]
     fn string_append() -> Result<(), Box<Error>> {
         let g = "string: This is a long string\n      : for testing\n      : append definitions\n";
-        let expected = G { string: "This is a long string\nfor testing\nappend definitions".to_string() };
+        let expected = G {
+            string: "This is a long string\nfor testing\nappend definitions"
+                .to_string(),
+        };
         assert_eq!(expected, from_str(g)?);
         Ok(())
     }
@@ -806,9 +832,16 @@ mod test {
     #[test]
     fn string_list() -> Result<(), Box<Error>> {
         let h = "strings: one two\n       : three four\n       :: fifth item\n       : sixth\n";
-        let expected = H { strings: vec!["one".to_string(), "two".to_string(),
-            "three".to_string(), "four".to_string(), "fifth item".to_string(),
-            "sixth".to_string() ]};
+        let expected = H {
+            strings: vec![
+                "one".to_string(),
+                "two".to_string(),
+                "three".to_string(),
+                "four".to_string(),
+                "fifth item".to_string(),
+                "sixth".to_string(),
+            ],
+        };
         assert_eq!(expected, from_str(h)?);
         Ok(())
     }
@@ -823,13 +856,25 @@ mod test {
     #[test]
     fn options() -> Result<(), Box<Error>> {
         let i = "flag: false\n";
-        let expected = I { flag: Some(false), int: None, float: None };
+        let expected = I {
+            flag: Some(false),
+            int: None,
+            float: None,
+        };
         assert_eq!(expected, from_str(i)?);
         let i = "int: 0xfab\n";
-        let expected = I { flag: None, int: Some(0xFAB), float: None };
+        let expected = I {
+            flag: None,
+            int: Some(0xFAB),
+            float: None,
+        };
         assert_eq!(expected, from_str(i)?);
         let i = "float: -5e37\n";
-        let expected = I { flag: None, int: None, float: Some(-5e37) };
+        let expected = I {
+            flag: None,
+            int: None,
+            float: Some(-5e37),
+        };
         assert_eq!(expected, from_str(i)?);
         Ok(())
     }
@@ -848,11 +893,22 @@ mod test {
     #[test]
     fn dict_list() -> Result<(), Box<Error>> {
         let j = "person:\n   name: Genghis Khan\n   score: 500\nperson:\n   name: Josef Stalin\n   score: 250\nperson:\n   name: Dudley Doo-Right\n   score: 800\n";
-        let expected = J { person: vec![
-            K { name: "Genghis Khan".to_string(), score: 500 },
-            K { name: "Josef Stalin".to_string(), score: 250 },
-            K { name: "Dudley Doo-Right".to_string(), score: 800 },
-        ] };
+        let expected = J {
+            person: vec![
+                K {
+                    name: "Genghis Khan".to_string(),
+                    score: 500,
+                },
+                K {
+                    name: "Josef Stalin".to_string(),
+                    score: 250,
+                },
+                K {
+                    name: "Dudley Doo-Right".to_string(),
+                    score: 800,
+                },
+            ],
+        };
         assert_eq!(expected, from_str(j)?);
         Ok(())
     }
@@ -860,11 +916,22 @@ mod test {
     #[test]
     fn dict_default() -> Result<(), Box<Error>> {
         let j = "person: Immanuel Kant\n  score: 600\nperson: Arthur Schopenhauer\n  score: 225\nperson: René Descartes\n  score: 400\n";
-        let expected = J { person: vec![
-            K { name: "Immanuel Kant".to_string(), score: 600 },
-            K { name: "Arthur Schopenhauer".to_string(), score: 225 },
-            K { name: "René Descartes".to_string(), score: 400 },
-        ] };
+        let expected = J {
+            person: vec![
+                K {
+                    name: "Immanuel Kant".to_string(),
+                    score: 600,
+                },
+                K {
+                    name: "Arthur Schopenhauer".to_string(),
+                    score: 225,
+                },
+                K {
+                    name: "René Descartes".to_string(),
+                    score: 400,
+                },
+            ],
+        };
         assert_eq!(expected, from_str(j)?);
         Ok(())
     }

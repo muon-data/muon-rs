@@ -228,8 +228,10 @@ impl<'a> Define<'a> {
                 if v.len() == 1 {
                     (self, None)
                 } else {
-                    (Define::Valid(indent, key, v[0]),
-                     Some(Define::Valid(indent, key, v[1])))
+                    (
+                        Define::Valid(indent, key, v[0]),
+                        Some(Define::Valid(indent, key, v[1])),
+                    )
                 }
             }
             _ => (self, None),
@@ -325,10 +327,13 @@ impl<'a> Iterator for DefIter<'a> {
             self.set_indent_spaces(&ln);
             match ln {
                 Line::SchemaSeparator => {
-                    return Some((Define::Invalid(
-                        ParseError::InvalidSchemaSeparator,
-                        ":::",
-                    ), false))
+                    return Some((
+                        Define::Invalid(
+                            ParseError::InvalidSchemaSeparator,
+                            ":::",
+                        ),
+                        false,
+                    ))
                 }
                 Line::Invalid(err, line) => {
                     return Some((Define::Invalid(err, line), false))
@@ -397,12 +402,24 @@ mod test {
         let mut di = DefIter::new(li);
         assert_eq!(
             di.next().unwrap(),
-            (Define::Invalid(ParseError::InvalidSchemaSeparator, ":::"), false)
+            (
+                Define::Invalid(ParseError::InvalidSchemaSeparator, ":::"),
+                false
+            )
         );
-        assert_eq!(di.next().unwrap(), (Define::Valid(0, "a", "value a"), false));
-        assert_eq!(di.next().unwrap(), (Define::Valid(0, "b", "value b"), false));
+        assert_eq!(
+            di.next().unwrap(),
+            (Define::Valid(0, "a", "value a"), false)
+        );
+        assert_eq!(
+            di.next().unwrap(),
+            (Define::Valid(0, "b", "value b"), false)
+        );
         assert_eq!(di.next().unwrap(), (Define::Valid(0, "c", ""), false));
-        assert_eq!(di.next().unwrap(), (Define::Valid(0, "c", "append"), false));
+        assert_eq!(
+            di.next().unwrap(),
+            (Define::Valid(0, "c", "append"), false)
+        );
         assert_eq!(
             di.next().unwrap(),
             (Define::Invalid(ParseError::InvalidIndent, "  "), false)

@@ -70,16 +70,14 @@ impl Integer for u128 {
 }
 
 /// Marker trait for float types
-pub trait Float: FromStr { }
+pub trait Float: FromStr {}
 
 impl Float for f32 {}
 impl Float for f64 {}
 
 /// Parse an integer from a string slice
 pub fn int<T: Integer>(v: &str) -> Option<T> {
-    T::from_str(v)
-        .ok()
-        .or_else(|| int_fallback(v))
+    T::from_str(v).ok().or_else(|| int_fallback(v))
 }
 
 /// Fallback for integer parsing
@@ -143,17 +141,14 @@ mod test {
         assert_eq!(int("0xffff"), Some(0xFFFFu16));
         assert_eq!(int("0x1234567890"), Some(0x1234567890i64));
         assert_eq!(int("0x1000000000000000"), Some(0x1000000000000000u64));
-        assert_eq!(
-            int("0x10000000000000000"),
-            Some(0x10000000000000000u128)
-        );
+        assert_eq!(int("0x10000000000000000"), Some(0x10000000000000000u128));
         assert_eq!(int("1_234_567_890"), Some(1234567890));
         assert_eq!(int("-12_34_56"), Some(-123456));
         assert_eq!(int("0b_1111_0000_1111"), Some(0xF0F));
         assert_eq!(int("0x123_FED"), Some(0x123_FED));
         assert_eq!(int::<u8>("0.0"), None);
         assert_eq!(int::<i16>("+-0"), None);
-//        assert_eq!(int::<u32>("00"), None);
+        // assert_eq!(int::<u32>("00"), None);
         assert_eq!(int::<u32>("abc"), None);
         assert_eq!(int::<i32>("0b0000_"), None);
         assert_eq!(int::<i32>("0b0000__0000"), None);

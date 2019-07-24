@@ -11,10 +11,10 @@
 
 mod de;
 mod error;
-mod parse;
 mod lines;
+mod parse;
 mod ser;
 
-pub use de::{from_slice, from_str, from_reader, Deserializer};
+pub use de::{from_reader, from_slice, from_str, Deserializer};
 pub use error::{Error, Result};
 pub use ser::{to_string, to_vec, to_writer, Serializer};
