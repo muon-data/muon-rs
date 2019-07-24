@@ -8,7 +8,7 @@ documentation = "https://docs.rs/muon-rs"
 homepage = "https://github.com/muon-data/muon-rs"
 repository = "https://github.com/muon-data/muon-rs"
 readme = "README.md"
-keywords = ["serde"]
+keywords = ["serialization", "serde"]
 categories = ["encoding"]
 edition = "2018"
 
