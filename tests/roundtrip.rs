@@ -1,3 +1,4 @@
+use muon_rs as muon;
 use serde_derive::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
