@@ -1,11 +1,16 @@
 [package]
 name = "muon"
-version = "0.0.1"
+version = "0.1.0"
+authors = ["Doug Lau <doug.p.lau@gmail.com>"]
+description = "Serde support for MuON data interchange format"
 license = "MIT OR Apache-2.0"
+documentation = "https://docs.rs/muon-rs"
+homepage = "https://github.com/muon-data/muon-rs"
+repository = "https://github.com/muon-data/muon-rs"
+readme = "README.md"
 keywords = ["serde"]
 categories = ["encoding"]
 edition = "2018"
-publish = false
 
 [dependencies]
 serde = "1.0"
