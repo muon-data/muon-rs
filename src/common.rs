@@ -4,7 +4,7 @@
 //
 
 /// Key / value separator type
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Separator {
     /// Single colon separator
     SingleColon,

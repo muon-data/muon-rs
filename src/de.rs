@@ -2,6 +2,7 @@
 //
 // Copyright (c) 2019  Douglas Lau
 //
+use crate::common::Separator;
 use crate::error::{Error, Result};
 use crate::lines::{DefIter, Define, LineIter};
 use crate::parse::{self, Float, Integer};
@@ -108,7 +109,7 @@ struct MappingIter<'a> {
     /// Define iterator
     defs: DefIter<'a>,
     /// Current define
-    define: Option<(Define<'a>, bool)>,
+    define: Option<Define<'a>>,
     /// Stack of nested dicts
     stack: Vec<Dict<'a>>,
 }
@@ -122,11 +123,8 @@ impl<'a> Iterator for MappingIter<'a> {
         }
         if self.is_list() {
             self.next_list()
-        } else if let Some((define, _)) = self.define {
-            self.define = None;
-            Some(define)
         } else {
-            None
+            self.define.take()
         }
     }
 }
@@ -149,29 +147,35 @@ impl<'a> MappingIter<'a> {
         if self.define.is_none() {
             self.define = self.defs.next();
         }
-        if let Some((define, _)) = self.define {
-            Some(define)
-        } else {
-            None
-        }
+        self.define
     }
 
     /// Get the next define in a list
     fn next_list(&mut self) -> Option<Define<'a>> {
-        if let Some((define, double)) = self.define {
-            if double {
-                self.define = None;
-                Some(define)
-            } else {
-                let (d0, d1) = define.split_list();
-                self.define = match d1 {
-                    Some(d) => Some((d, double)),
-                    None => None,
-                };
-                Some(d0)
+        if let Some(define) = self.define {
+            match define {
+                Define::Valid(_, _, separator, _) => {
+                    match separator {
+                        Separator::DoubleColon => {
+                            self.define = None;
+                            Some(define)
+                        }
+                        Separator::DoubleColonAppend => {
+                            // FIXME
+                            self.define = None;
+                            Some(define)
+                        }
+                        _ => {
+                            let (d0, d1) = define.split_list();
+                            self.define = d1;
+                            Some(d0)
+                        }
+                    }
+                }
+                _ => Some(define),
             }
         } else {
-            None
+            self.define
         }
     }
 
@@ -191,10 +195,12 @@ impl<'a> MappingIter<'a> {
         let indent = self.stack.len();
         if let Some(dict) = self.stack.last_mut() {
             if let Some(key) = dict.start_first() {
-                if let Some((Define::Valid(_, _, v), _)) = self.define.take() {
+                if let Some(Define::Valid(_, _, separator, v)) =
+                    self.define.take()
+                {
                     if v.len() > 0 && indent > 0 {
                         self.define =
-                            Some((Define::Valid(indent - 1, key, v), false))
+                            Some(Define::Valid(indent - 1, key, separator, v))
                     }
                 }
             }
@@ -235,7 +241,7 @@ impl<'a> MappingIter<'a> {
 
     /// Check indent nesting
     fn check_indent(&mut self) -> bool {
-        if let Some(Define::Valid(indent, _, _)) = self.peek() {
+        if let Some(Define::Valid(indent, _, _, _)) = self.peek() {
             self.stack.len() == indent + 1
         } else {
             false
@@ -246,7 +252,7 @@ impl<'a> MappingIter<'a> {
     fn check_key(&mut self) -> bool {
         if let Some(dict) = self.stack.last() {
             if let Some(k) = dict.key {
-                if let Some(Define::Valid(_, key, _)) = self.peek() {
+                if let Some(Define::Valid(_, key, _, _)) = self.peek() {
                     return key == k;
                 }
             }
@@ -311,7 +317,7 @@ impl<'de> Deserializer<'de> {
     /// Peek the current key
     fn peek_key(&mut self) -> Result<&'de str> {
         match Deserializer::define_result(self.mappings.peek())? {
-            Define::Valid(_, k, _) => Ok(k),
+            Define::Valid(_, k, _, _) => Ok(k),
             _ => unreachable!(),
         }
     }
@@ -319,7 +325,7 @@ impl<'de> Deserializer<'de> {
     /// Get the current value
     fn get_value(&mut self) -> Result<&'de str> {
         match Deserializer::define_result(self.mappings.next())? {
-            Define::Valid(_, _, v) => Ok(v),
+            Define::Valid(_, _, _, v) => Ok(v),
             _ => unreachable!(),
         }
     }
