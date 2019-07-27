@@ -51,14 +51,19 @@ enum LinePos {
     AfterValue,
 }
 
+/// Key / value separator type
 #[derive(Clone, Copy, Debug)]
 enum Separator {
+    /// Single colon separator
     SingleColon,
+    /// Double colon separator (non-breaking string)
     DoubleColon,
+    /// Double colon append separator (non-breaking string)
     DoubleColonAppend,
 }
 
 impl Separator {
+    /// Get the separator as a string slice
     fn as_str(&self) -> &'static str {
         match self {
             Separator::SingleColon => ": ",
@@ -68,20 +73,30 @@ impl Separator {
     }
 }
 
+/// Dictionary for mapping stack
 #[derive(Debug)]
 struct Dict {
+    /// Current key
     key: Option<String>,
+    /// List flag (applies to current key)
     list: bool,
 }
 
 /// MuON serializer
 pub struct Serializer<W: Write> {
+    /// Number of spaces to indent
     n_indent: usize,
+    /// Writer for output
     writer: W,
+    /// Stack of dict values
     stack: Vec<Dict>,
+    /// Flag if current item is a key
     is_key: bool,
+    /// Output nesting depth
     nesting: usize,
+    /// Current line position
     line: LinePos,
+    /// Current key / value separator
     separator: Separator,
 }
 
@@ -101,20 +116,24 @@ impl<W: Write> Serializer<W> {
         }
     }
 
+    /// Push a new dict onto stack
     fn push_stack(&mut self) {
         self.stack.push(Dict { key: None, list: false });
     }
 
+    /// Pop a dict from stack
     fn pop_stack(&mut self) {
         self.stack.pop();
     }
 
+    /// Set the top of stack to a list
     fn set_list(&mut self, list: bool) {
         if let Some(dict) = self.stack.last_mut() {
             dict.list = list
         }
     }
 
+    /// Check if the current define is a list
     fn is_list(&self) -> bool {
         match self.stack.last() {
             Some(dict) => dict.list,
@@ -122,6 +141,7 @@ impl<W: Write> Serializer<W> {
         }
     }
 
+    /// Set the current key
     fn set_key(&mut self, key: &str) {
         if let Some(dict) = self.stack.last_mut() {
             dict.key = Some(quoted_key(key));
@@ -129,14 +149,17 @@ impl<W: Write> Serializer<W> {
         }
     }
 
+    /// Get the current nesting depth
     fn nesting(&self) -> usize {
         self.stack.len()
     }
 
+    /// Set the output nesting depth
     fn set_nesting(&mut self, n: usize) {
         self.nesting = n;
     }
 
+    /// Check if line should be merged
     fn is_merge_line(&self) -> bool {
         match (self.line, self.separator) {
             (LinePos::AfterValue, Separator::SingleColon) => true,
@@ -144,6 +167,7 @@ impl<W: Write> Serializer<W> {
         }
     }
 
+    /// Serialize a key
     fn ser_key<T>(&mut self, t: &T) -> Result<()>
     where
         T: ?Sized + Serialize,
@@ -154,6 +178,7 @@ impl<W: Write> Serializer<W> {
         Ok(())
     }
 
+    /// Serialize a value
     fn ser_value<T>(&mut self, t: &T) -> Result<()>
     where
         T: ?Sized + Serialize,
@@ -161,6 +186,7 @@ impl<W: Write> Serializer<W> {
         Ok(t.serialize(&mut *self)?)
     }
 
+    /// Serialize an item
     fn ser_item<I: Item>(&mut self, item: I) -> Result<()> {
         if self.is_key {
             return Err(Error::InvalidKey);
@@ -175,6 +201,7 @@ impl<W: Write> Serializer<W> {
         Ok(())
     }
 
+    /// Write all necessary keys
     fn write_keys(&mut self) -> Result<()> {
         if self.nesting == self.nesting() {
             self.write_blank_key()?;
@@ -192,6 +219,7 @@ impl<W: Write> Serializer<W> {
         Ok(write!(self.writer, "{}", self.separator.as_str())?)
     }
 
+    /// Write a blank key (with spaces instead of each char)
     fn write_blank_key(&mut self) -> Result<()> {
         self.write_linefeed()?;
         self.write_indent(self.nesting)?;
@@ -205,6 +233,7 @@ impl<W: Write> Serializer<W> {
         Ok(())
     }
 
+    /// Write a line feed if necessary
     fn write_linefeed(&mut self) -> Result<()> {
         if let LinePos::AfterValue = self.line {
             write!(self.writer, "\n")?;
@@ -213,6 +242,7 @@ impl<W: Write> Serializer<W> {
         Ok(())
     }
 
+    /// Write an indentation
     fn write_indent(&mut self, n: usize) -> Result<()> {
         for _ in self.n_indent..n * self.n_indent {
             write!(self.writer, " ")?;
@@ -220,6 +250,7 @@ impl<W: Write> Serializer<W> {
         Ok(())
     }
 
+    /// Write a key
     fn write_key(&mut self, n: usize) -> Result<()> {
         self.write_linefeed()?;
         self.write_indent(n + 1)?;
@@ -231,6 +262,7 @@ impl<W: Write> Serializer<W> {
         Ok(())
     }
 
+    /// Write a text item
     fn write_text(&mut self, v: &str) -> Result<()> {
         if self.is_list() && (v.contains(' ') || v.contains('\n')) {
             self.separator = Separator::DoubleColon;
@@ -250,6 +282,7 @@ impl<W: Write> Serializer<W> {
     }
 }
 
+/// Create a quoted key
 fn quoted_key(k: &str) -> String {
     if is_quoting_required(k) {
         let mut s = String::new();
@@ -267,6 +300,7 @@ fn quoted_key(k: &str) -> String {
     }
 }
 
+/// Check if quoting is required for a key
 fn is_quoting_required(k: &str) -> bool {
     k.starts_with(' ')
         || k.starts_with('"')
