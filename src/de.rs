@@ -891,7 +891,7 @@ mod test {
 
     #[test]
     fn dict_list() -> Result<(), Box<Error>> {
-        let j = "person:\n   name: Genghis Khan\n   score: 500\nperson:\n   name: Josef Stalin\n   score: 250\nperson:\n   name: Dudley Doo-Right\n   score: 800\n";
+        let j = "person:\n   name: Genghis Khan\n   score: 500\nperson:\n   name: Josef Stalin\n   score: 250\nperson:\n   name: Dudley Do-Right\n   score: 800\n";
         let expected = J {
             person: vec![
                 K {
@@ -903,7 +903,7 @@ mod test {
                     score: 250,
                 },
                 K {
-                    name: "Dudley Doo-Right".to_string(),
+                    name: "Dudley Do-Right".to_string(),
                     score: 800,
                 },
             ],
