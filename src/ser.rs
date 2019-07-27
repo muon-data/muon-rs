@@ -373,7 +373,7 @@ impl<'a, W: Write> ser::Serializer for &'a mut Serializer<W> {
     }
 
     fn serialize_bytes(self, _v: &[u8]) -> Result<()> {
-        Ok(())
+        Err(Error::UnsupportedType("bytes"))
     }
 
     fn serialize_none(self) -> Result<()> {
