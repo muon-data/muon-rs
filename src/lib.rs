@@ -9,6 +9,7 @@
 //! Serialize / deserialize [MuON](https://github.com/muon-data/muon.git)
 //! documents in Rust.
 
+mod common;
 mod de;
 mod error;
 mod lines;

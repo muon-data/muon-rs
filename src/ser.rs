@@ -2,6 +2,7 @@
 //
 // Copyright (c) 2019  Douglas Lau
 //
+use crate::common::Separator;
 use crate::error::{Error, Result};
 use serde::ser::{self, Serialize};
 use std::io::Write;
@@ -49,28 +50,6 @@ enum LinePos {
     Start,
     /// After one or more values
     AfterValue,
-}
-
-/// Key / value separator type
-#[derive(Clone, Copy, Debug)]
-enum Separator {
-    /// Single colon separator
-    SingleColon,
-    /// Double colon separator (non-breaking string)
-    DoubleColon,
-    /// Double colon append separator (non-breaking string)
-    DoubleColonAppend,
-}
-
-impl Separator {
-    /// Get the separator as a string slice
-    fn as_str(&self) -> &'static str {
-        match self {
-            Separator::SingleColon => ": ",
-            Separator::DoubleColon => "::",
-            Separator::DoubleColonAppend => ":: ",
-        }
-    }
 }
 
 /// Dictionary for mapping stack
