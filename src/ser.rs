@@ -4,100 +4,41 @@
 //
 use crate::error::{Error, Result};
 use serde::ser::{self, Serialize};
-use std::fmt;
 use std::io::Write;
 
+/// Item which can be serialized to a writer
 trait Item {
-    fn write<W: fmt::Write>(&self, writer: &mut W) -> fmt::Result;
+    fn write<W: Write>(&self, writer: &mut W) -> Result<()>;
 }
 
 impl Item for bool {
-    fn write<W: fmt::Write>(&self, writer: &mut W) -> fmt::Result {
-        writer.write_str(if *self { "true" } else { "false" })
+    fn write<W: Write>(&self, writer: &mut W) -> Result<()> {
+        if *self {
+            write!(writer, "true")?;
+        } else {
+            write!(writer, "false")?;
+        }
+        Ok(())
     }
 }
 
-impl Item for i8 {
-    fn write<W: fmt::Write>(&self, writer: &mut W) -> fmt::Result {
-        writer.write_str(&*self.to_string())
-    }
+macro_rules! impl_item {
+    () => {};
+    ($i:ident $($more:ident)*) => {
+        impl Item for $i {
+            fn write<W: Write>(&self, writer: &mut W) -> Result<()> {
+                Ok(write!(writer, "{}", &*self.to_string())?)
+            }
+        }
+        impl_item!($($more)*);
+    };
 }
 
-impl Item for i16 {
-    fn write<W: fmt::Write>(&self, writer: &mut W) -> fmt::Result {
-        writer.write_str(&*self.to_string())
-    }
-}
-
-impl Item for i32 {
-    fn write<W: fmt::Write>(&self, writer: &mut W) -> fmt::Result {
-        writer.write_str(&*self.to_string())
-    }
-}
-
-impl Item for i64 {
-    fn write<W: fmt::Write>(&self, writer: &mut W) -> fmt::Result {
-        writer.write_str(&*self.to_string())
-    }
-}
-
-impl Item for i128 {
-    fn write<W: fmt::Write>(&self, writer: &mut W) -> fmt::Result {
-        writer.write_str(&*self.to_string())
-    }
-}
-
-impl Item for u8 {
-    fn write<W: fmt::Write>(&self, writer: &mut W) -> fmt::Result {
-        writer.write_str(&*self.to_string())
-    }
-}
-
-impl Item for u16 {
-    fn write<W: fmt::Write>(&self, writer: &mut W) -> fmt::Result {
-        writer.write_str(&*self.to_string())
-    }
-}
-
-impl Item for u32 {
-    fn write<W: fmt::Write>(&self, writer: &mut W) -> fmt::Result {
-        writer.write_str(&*self.to_string())
-    }
-}
-
-impl Item for u64 {
-    fn write<W: fmt::Write>(&self, writer: &mut W) -> fmt::Result {
-        writer.write_str(&*self.to_string())
-    }
-}
-
-impl Item for u128 {
-    fn write<W: fmt::Write>(&self, writer: &mut W) -> fmt::Result {
-        writer.write_str(&*self.to_string())
-    }
-}
-
-impl Item for f32 {
-    fn write<W: fmt::Write>(&self, writer: &mut W) -> fmt::Result {
-        writer.write_str(&*self.to_string())
-    }
-}
-
-impl Item for f64 {
-    fn write<W: fmt::Write>(&self, writer: &mut W) -> fmt::Result {
-        writer.write_str(&*self.to_string())
-    }
-}
-
-impl Item for char {
-    fn write<W: fmt::Write>(&self, writer: &mut W) -> fmt::Result {
-        writer.write_char(*self)
-    }
-}
+impl_item!(i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char);
 
 impl Item for &str {
-    fn write<W: fmt::Write>(&self, writer: &mut W) -> fmt::Result {
-        writer.write_str(self)
+    fn write<W: Write>(&self, writer: &mut W) -> Result<()> {
+        Ok(write!(writer, "{}", &*self.to_string())?)
     }
 }
 
@@ -119,40 +60,40 @@ enum LinePos {
 }
 
 /// MuON serializer
-pub struct Serializer {
+pub struct Serializer<W: Write> {
     n_indent: usize,
     keys: Vec<Option<String>>,
+    writer: W,
     nesting: usize,
     line: LinePos,
     double_colon: bool,
     stack: Vec<KeyValue>,
-    output: String,
 }
 
-impl Serializer {
+impl<W: Write> Serializer<W> {
     /// Create a new MuON Serializer
-    fn new(n_indent: usize) -> Self {
+    fn new(n_indent: usize, writer: W) -> Self {
         // Indents must be at least 1 space
         let n_indent = n_indent.max(1);
         Serializer {
             n_indent,
             keys: vec![],
+            writer,
             nesting: 0,
             line: LinePos::Start,
             double_colon: false,
             stack: vec![],
-            output: String::new(),
         }
     }
 
-    fn set_key(&mut self, key: &str) {
+    fn set_key(&mut self, key: &str) -> Result<()> {
         if let Some(mut k) = self.keys.pop() {
             let key = quoted_key(key);
             k.replace(key);
             self.set_nesting();
             self.keys.push(k);
         }
-        self.write_linefeed();
+        self.write_linefeed()
     }
 
     fn nesting(&self) -> usize {
@@ -217,11 +158,12 @@ impl Serializer {
         Ok(())
     }
 
-    fn write_linefeed(&mut self) {
+    fn write_linefeed(&mut self) -> Result<()> {
         if let LinePos::AfterValue = self.line {
-            self.output.push('\n');
+            write!(self.writer, "\n")?;
             self.line = LinePos::Start;
         }
+        Ok(())
     }
 
     fn ser_item<I: Item>(&mut self, item: I) -> Result<()> {
@@ -229,64 +171,68 @@ impl Serializer {
             return Err(Error::InvalidKey);
         }
         if self.is_merge_line() {
-            self.output.push(' ');
+            write!(self.writer, " ")?;
         } else {
-            self.write_keys();
+            self.write_keys()?;
         }
-        item.write(&mut self.output)?;
+        item.write(&mut self.writer)?;
         self.line = LinePos::AfterValue;
         if self.double_colon {
-            self.write_linefeed();
+            self.write_linefeed()?;
         }
         Ok(())
     }
 
-    fn write_keys(&mut self) {
+    fn write_keys(&mut self) -> Result<()> {
         if self.nesting == self.nesting() {
-            self.write_blank_key();
+            self.write_blank_key()?;
         } else {
             let n0 = self.nesting.max(1) - 1;
             let n1 = self.nesting();
             for n in n0..n1 {
-                self.write_key(n);
+                self.write_key(n)?;
                 if n + 1 < n1 {
-                    self.output += ":\n";
+                    write!(self.writer, ":\n")?;
                 }
             }
             self.set_nesting();
         }
-        self.write_colon();
+        self.write_colon()
     }
 
-    fn write_blank_key(&mut self) {
-        self.write_linefeed();
-        self.write_indent(self.nesting);
+    fn write_blank_key(&mut self) -> Result<()> {
+        self.write_linefeed()?;
+        self.write_indent(self.nesting)?;
         for _ in 0..self.key_len() {
-            self.output.push(' ');
+            write!(self.writer, " ")?;
         }
+        Ok(())
     }
 
-    fn write_indent(&mut self, n: usize) {
+    fn write_indent(&mut self, n: usize) -> Result<()> {
         for _ in self.n_indent..n * self.n_indent {
-            self.output.push(' ');
+            write!(self.writer, " ")?;
         }
+        Ok(())
     }
 
-    fn write_colon(&mut self) {
+    fn write_colon(&mut self) -> Result<()> {
         if self.double_colon {
-            self.output += ":: ";
+            write!(self.writer, ":: ")?;
         } else {
-            self.output += ": ";
+            write!(self.writer, ": ")?;
         }
+        Ok(())
     }
 
-    fn write_key(&mut self, n: usize) {
-        self.write_linefeed();
-        self.write_indent(n + 1);
+    fn write_key(&mut self, n: usize) -> Result<()> {
+        self.write_linefeed()?;
+        self.write_indent(n + 1)?;
         let k = &self.keys[n];
         if let Some(key) = k {
-            self.output += &key;
+            write!(self.writer, "{}", key)?;
         }
+        Ok(())
     }
 }
 
@@ -314,7 +260,7 @@ fn is_quoting_required(k: &str) -> bool {
         || k.contains(':')
 }
 
-impl<'a> ser::Serializer for &'a mut Serializer {
+impl<'a, W: Write> ser::Serializer for &'a mut Serializer<W> {
     type Ok = ();
     type Error = Error;
     type SerializeSeq = Self;
@@ -370,14 +316,14 @@ impl<'a> ser::Serializer for &'a mut Serializer {
 
     fn serialize_str(self, v: &str) -> Result<()> {
         if self.is_key() {
-            self.set_key(v);
+            self.set_key(v)?;
         } else {
             if self.set_double_colon(
                 self.is_sequence() && (v.contains(' ') || v.contains('\n')),
             ) {
                 // Blank line needed between two double-colon values
-                self.write_blank_key();
-                self.output += ":\n";
+                self.write_blank_key()?;
+                write!(self.writer, ":\n")?;
                 self.line = LinePos::Start;
             }
             for val in v.split('\n') {
@@ -496,7 +442,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     }
 }
 
-impl<'a> ser::SerializeSeq for &'a mut Serializer {
+impl<'a, W: Write> ser::SerializeSeq for &'a mut Serializer<W> {
     type Ok = ();
     type Error = Error;
 
@@ -512,7 +458,7 @@ impl<'a> ser::SerializeSeq for &'a mut Serializer {
     }
 }
 
-impl<'a> ser::SerializeTuple for &'a mut Serializer {
+impl<'a, W: Write> ser::SerializeTuple for &'a mut Serializer<W> {
     type Ok = ();
     type Error = Error;
 
@@ -528,7 +474,7 @@ impl<'a> ser::SerializeTuple for &'a mut Serializer {
     }
 }
 
-impl<'a> ser::SerializeTupleStruct for &'a mut Serializer {
+impl<'a, W: Write> ser::SerializeTupleStruct for &'a mut Serializer<W> {
     type Ok = ();
     type Error = Error;
 
@@ -544,7 +490,7 @@ impl<'a> ser::SerializeTupleStruct for &'a mut Serializer {
     }
 }
 
-impl<'a> ser::SerializeTupleVariant for &'a mut Serializer {
+impl<'a, W: Write> ser::SerializeTupleVariant for &'a mut Serializer<W> {
     type Ok = ();
     type Error = Error;
 
@@ -560,7 +506,7 @@ impl<'a> ser::SerializeTupleVariant for &'a mut Serializer {
     }
 }
 
-impl<'a> ser::SerializeMap for &'a mut Serializer {
+impl<'a, W: Write> ser::SerializeMap for &'a mut Serializer<W> {
     type Ok = ();
     type Error = Error;
 
@@ -584,7 +530,7 @@ impl<'a> ser::SerializeMap for &'a mut Serializer {
     }
 }
 
-impl<'a> ser::SerializeStruct for &'a mut Serializer {
+impl<'a, W: Write> ser::SerializeStruct for &'a mut Serializer<W> {
     type Ok = ();
     type Error = Error;
 
@@ -598,13 +544,13 @@ impl<'a> ser::SerializeStruct for &'a mut Serializer {
 
     fn end(self) -> Result<()> {
         self.keys.pop();
-        self.write_linefeed();
+        self.write_linefeed()?;
         self.set_nesting();
         Ok(())
     }
 }
 
-impl<'a> ser::SerializeStructVariant for &'a mut Serializer {
+impl<'a, W: Write> ser::SerializeStructVariant for &'a mut Serializer<W> {
     type Ok = ();
     type Error = Error;
 
@@ -628,10 +574,10 @@ pub fn to_string<T>(value: &T) -> Result<String>
 where
     T: Serialize,
 {
-    let mut serializer = Serializer::new(2);
+    let mut serializer = Serializer::new(2, vec![]);
     value.serialize(&mut serializer)?;
-    serializer.write_linefeed();
-    Ok(serializer.output)
+    serializer.write_linefeed()?;
+    Ok(String::from_utf8(serializer.writer)?)
 }
 
 /// Serialize a value to a Vec of bytes in MuON format
@@ -639,19 +585,21 @@ pub fn to_vec<T>(value: &T) -> Result<Vec<u8>>
 where
     T: Serialize,
 {
-    let mut serializer = Serializer::new(2);
+    let mut serializer = Serializer::new(2, vec![]);
     value.serialize(&mut serializer)?;
-    serializer.write_linefeed();
-    Ok(serializer.output.into_bytes())
+    serializer.write_linefeed()?;
+    Ok(serializer.writer)
 }
 
 /// Serialize a value to a writer in MuON format
-pub fn to_writer<W, T>(mut writer: W, value: &T) -> Result<()>
+pub fn to_writer<W, T>(writer: W, value: &T) -> Result<()>
 where
     W: Write,
     T: Serialize,
 {
-    writer.write(&to_vec(value)?)?;
+    let mut serializer = Serializer::new(2, writer);
+    value.serialize(&mut serializer)?;
+    serializer.write_linefeed()?;
     Ok(())
 }
 
