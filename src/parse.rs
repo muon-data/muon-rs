@@ -4,70 +4,24 @@
 //
 use std::str::FromStr;
 
-/// Marker trait for integer types
+/// Integer trait
 pub trait Integer: FromStr {
     fn from_str_radix(src: &str, radix: u32) -> Option<Self>;
 }
 
-impl Integer for i8 {
-    fn from_str_radix(src: &str, radix: u32) -> Option<Self> {
-        Self::from_str_radix(src, radix).ok()
-    }
+macro_rules! impl_integer {
+    () => {};
+    ($i:ident $($more:ident)*) => {
+        impl Integer for $i {
+            fn from_str_radix(src: &str, radix: u32) -> Option<Self> {
+                Self::from_str_radix(src, radix).ok()
+            }
+        }
+        impl_integer!($($more)*);
+    };
 }
 
-impl Integer for u8 {
-    fn from_str_radix(src: &str, radix: u32) -> Option<Self> {
-        Self::from_str_radix(src, radix).ok()
-    }
-}
-
-impl Integer for i16 {
-    fn from_str_radix(src: &str, radix: u32) -> Option<Self> {
-        Self::from_str_radix(src, radix).ok()
-    }
-}
-
-impl Integer for u16 {
-    fn from_str_radix(src: &str, radix: u32) -> Option<Self> {
-        Self::from_str_radix(src, radix).ok()
-    }
-}
-
-impl Integer for i32 {
-    fn from_str_radix(src: &str, radix: u32) -> Option<Self> {
-        Self::from_str_radix(src, radix).ok()
-    }
-}
-
-impl Integer for u32 {
-    fn from_str_radix(src: &str, radix: u32) -> Option<Self> {
-        Self::from_str_radix(src, radix).ok()
-    }
-}
-
-impl Integer for i64 {
-    fn from_str_radix(src: &str, radix: u32) -> Option<Self> {
-        Self::from_str_radix(src, radix).ok()
-    }
-}
-
-impl Integer for u64 {
-    fn from_str_radix(src: &str, radix: u32) -> Option<Self> {
-        Self::from_str_radix(src, radix).ok()
-    }
-}
-
-impl Integer for i128 {
-    fn from_str_radix(src: &str, radix: u32) -> Option<Self> {
-        Self::from_str_radix(src, radix).ok()
-    }
-}
-
-impl Integer for u128 {
-    fn from_str_radix(src: &str, radix: u32) -> Option<Self> {
-        Self::from_str_radix(src, radix).ok()
-    }
-}
+impl_integer!(i8 i16 i32 i64 i128 u8 u16 u32 u64 u128);
 
 /// Marker trait for float types
 pub trait Float: FromStr {}
