@@ -16,6 +16,8 @@ pub enum Error {
     Format(fmt::Error),
     /// Invalid UTF-8 while deserializing
     Utf8(str::Utf8Error),
+    /// Invalid UTF-8 while serializing
+    FromUtf8(std::string::FromUtf8Error),
     /// Serializing error from serde
     Serialize(String),
     /// Deserializing error from serde
@@ -57,6 +59,7 @@ impl std::error::Error for Error {
             Error::IO(ref e) => e.description(),
             Error::Format(ref e) => e.description(),
             Error::Utf8(ref e) => e.description(),
+            Error::FromUtf8(ref e) => e.description(),
             Error::Serialize(ref msg) => msg,
             Error::Deserialize(ref msg) => msg,
             Error::UnsupportedType(ref msg) => msg,
@@ -82,5 +85,11 @@ impl From<fmt::Error> for Error {
 impl From<str::Utf8Error> for Error {
     fn from(e: str::Utf8Error) -> Self {
         Error::Utf8(e)
+    }
+}
+
+impl From<std::string::FromUtf8Error> for Error {
+    fn from(e: std::string::FromUtf8Error) -> Self {
+        Error::FromUtf8(e)
     }
 }

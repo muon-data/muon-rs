@@ -42,16 +42,8 @@ impl Item for &str {
     }
 }
 
-/// Key / Value enum for state
-#[derive(Debug)]
-enum KeyValue {
-    Key,
-    Value,
-    ValueSeq,
-}
-
 /// Position of line output
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 enum LinePos {
     /// Start of line
     Start,
@@ -59,15 +51,38 @@ enum LinePos {
     AfterValue,
 }
 
+#[derive(Clone, Copy, Debug)]
+enum Separator {
+    SingleColon,
+    DoubleColon,
+    DoubleColonAppend,
+}
+
+impl Separator {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Separator::SingleColon => ": ",
+            Separator::DoubleColon => "::",
+            Separator::DoubleColonAppend => ":: ",
+        }
+    }
+}
+
+#[derive(Debug)]
+struct Dict {
+    key: Option<String>,
+    list: bool,
+}
+
 /// MuON serializer
 pub struct Serializer<W: Write> {
     n_indent: usize,
-    keys: Vec<Option<String>>,
     writer: W,
+    stack: Vec<Dict>,
+    is_key: bool,
     nesting: usize,
     line: LinePos,
-    double_colon: bool,
-    stack: Vec<KeyValue>,
+    separator: Separator,
 }
 
 impl<W: Write> Serializer<W> {
@@ -77,97 +92,77 @@ impl<W: Write> Serializer<W> {
         let n_indent = n_indent.max(1);
         Serializer {
             n_indent,
-            keys: vec![],
             writer,
+            stack: vec![],
+            is_key: false,
             nesting: 0,
             line: LinePos::Start,
-            double_colon: false,
-            stack: vec![],
+            separator: Separator::SingleColon,
         }
     }
 
-    fn set_key(&mut self, key: &str) -> Result<()> {
-        if let Some(mut k) = self.keys.pop() {
-            let key = quoted_key(key);
-            k.replace(key);
-            self.set_nesting();
-            self.keys.push(k);
+    fn push_stack(&mut self) {
+        self.stack.push(Dict { key: None, list: false });
+    }
+
+    fn pop_stack(&mut self) {
+        self.stack.pop();
+    }
+
+    fn set_list(&mut self, list: bool) {
+        if let Some(dict) = self.stack.last_mut() {
+            dict.list = list
         }
-        self.write_linefeed()
+    }
+
+    fn is_list(&self) -> bool {
+        match self.stack.last() {
+            Some(dict) => dict.list,
+            _ => false,
+        }
+    }
+
+    fn set_key(&mut self, key: &str) {
+        if let Some(dict) = self.stack.last_mut() {
+            dict.key = Some(quoted_key(key));
+            self.set_nesting(self.nesting() - 1);
+        }
     }
 
     fn nesting(&self) -> usize {
-        self.keys.len()
+        self.stack.len()
     }
 
-    fn set_nesting(&mut self) {
-        self.nesting = self.nesting();
-    }
-
-    fn set_double_colon(&mut self, double_colon: bool) -> bool {
-        let r = self.double_colon && double_colon;
-        self.double_colon = double_colon;
-        r
-    }
-
-    fn key_len(&self) -> usize {
-        let n = self.nesting();
-        if n > 0 {
-            if let Some(k) = &self.keys[n - 1] {
-                k.len()
-            } else {
-                0
-            }
-        } else {
-            0
-        }
-    }
-
-    fn is_key(&self) -> bool {
-        let n = self.stack.len();
-        (n > 0)
-            && match self.stack[n - 1] {
-                KeyValue::Key => true,
-                _ => false,
-            }
-    }
-
-    fn is_sequence(&self) -> bool {
-        let n = self.stack.len();
-        (n > 0)
-            && match self.stack[n - 1] {
-                KeyValue::ValueSeq => true,
-                _ => false,
-            }
+    fn set_nesting(&mut self, n: usize) {
+        self.nesting = n;
     }
 
     fn is_merge_line(&self) -> bool {
-        match self.line {
-            LinePos::Start => false,
-            LinePos::AfterValue => !self.double_colon,
+        match (self.line, self.separator) {
+            (LinePos::AfterValue, Separator::SingleColon) => true,
+            (_, _) => false,
         }
     }
 
-    fn ser_kv<T>(&mut self, t: &T, kv: KeyValue) -> Result<()>
+    fn ser_key<T>(&mut self, t: &T) -> Result<()>
     where
         T: ?Sized + Serialize,
     {
-        self.stack.push(kv);
+        self.is_key = true;
         t.serialize(&mut *self)?;
-        self.stack.pop();
+        self.is_key = false;
         Ok(())
     }
 
-    fn write_linefeed(&mut self) -> Result<()> {
-        if let LinePos::AfterValue = self.line {
-            write!(self.writer, "\n")?;
-            self.line = LinePos::Start;
-        }
-        Ok(())
+    fn ser_value<T>(&mut self, t: &T) -> Result<()>
+    where
+        T: ?Sized + Serialize,
+    {
+        Ok(t.serialize(&mut *self)?)
     }
 
     fn ser_item<I: Item>(&mut self, item: I) -> Result<()> {
-        if self.is_key() {
+        if self.is_key {
             return Err(Error::InvalidKey);
         }
         if self.is_merge_line() {
@@ -177,9 +172,6 @@ impl<W: Write> Serializer<W> {
         }
         item.write(&mut self.writer)?;
         self.line = LinePos::AfterValue;
-        if self.double_colon {
-            self.write_linefeed()?;
-        }
         Ok(())
     }
 
@@ -195,16 +187,28 @@ impl<W: Write> Serializer<W> {
                     write!(self.writer, ":\n")?;
                 }
             }
-            self.set_nesting();
+            self.set_nesting(n1);
         }
-        self.write_colon()
+        Ok(write!(self.writer, "{}", self.separator.as_str())?)
     }
 
     fn write_blank_key(&mut self) -> Result<()> {
         self.write_linefeed()?;
         self.write_indent(self.nesting)?;
-        for _ in 0..self.key_len() {
-            write!(self.writer, " ")?;
+        if let Some(dict) = self.stack.last() {
+            if let Some(key) = &dict.key {
+                for _ in key.chars() {
+                    write!(self.writer, " ")?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn write_linefeed(&mut self) -> Result<()> {
+        if let LinePos::AfterValue = self.line {
+            write!(self.writer, "\n")?;
+            self.line = LinePos::Start;
         }
         Ok(())
     }
@@ -216,22 +220,32 @@ impl<W: Write> Serializer<W> {
         Ok(())
     }
 
-    fn write_colon(&mut self) -> Result<()> {
-        if self.double_colon {
-            write!(self.writer, ":: ")?;
-        } else {
-            write!(self.writer, ": ")?;
+    fn write_key(&mut self, n: usize) -> Result<()> {
+        self.write_linefeed()?;
+        self.write_indent(n + 1)?;
+        if let Some(dict) = self.stack.iter().nth(n) {
+            if let Some(key) = &dict.key {
+                write!(self.writer, "{}", key)?;
+            }
         }
         Ok(())
     }
 
-    fn write_key(&mut self, n: usize) -> Result<()> {
-        self.write_linefeed()?;
-        self.write_indent(n + 1)?;
-        let k = &self.keys[n];
-        if let Some(key) = k {
-            write!(self.writer, "{}", key)?;
+    fn write_text(&mut self, v: &str) -> Result<()> {
+        if self.is_list() && (v.contains(' ') || v.contains('\n')) {
+            self.separator = Separator::DoubleColon;
         }
+        for val in v.split('\n') {
+            self.ser_item(val)?;
+            match self.separator {
+                Separator::SingleColon => (),
+                _ => {
+                    self.write_linefeed()?;
+                    self.separator = Separator::DoubleColonAppend
+                }
+            }
+        }
+        self.separator = Separator::SingleColon;
         Ok(())
     }
 }
@@ -315,20 +329,11 @@ impl<'a, W: Write> ser::Serializer for &'a mut Serializer<W> {
     }
 
     fn serialize_str(self, v: &str) -> Result<()> {
-        if self.is_key() {
-            self.set_key(v)?;
+        if self.is_key {
+            self.set_key(v);
+            self.write_linefeed()?;
         } else {
-            if self.set_double_colon(
-                self.is_sequence() && (v.contains(' ') || v.contains('\n')),
-            ) {
-                // Blank line needed between two double-colon values
-                self.write_blank_key()?;
-                write!(self.writer, ":\n")?;
-                self.line = LinePos::Start;
-            }
-            for val in v.split('\n') {
-                self.ser_item(val)?;
-            }
+            self.write_text(v)?;
         }
         Ok(())
     }
@@ -386,11 +391,12 @@ impl<'a, W: Write> ser::Serializer for &'a mut Serializer<W> {
     where
         V: ?Sized + Serialize,
     {
-        self.ser_kv(variant, KeyValue::Key)?;
-        self.ser_kv(value, KeyValue::Value)
+        self.ser_key(variant)?;
+        self.ser_value(value)
     }
 
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq> {
+        self.set_list(true);
         Ok(self)
     }
 
@@ -413,12 +419,13 @@ impl<'a, W: Write> ser::Serializer for &'a mut Serializer<W> {
         variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeTupleVariant> {
-        self.ser_kv(variant, KeyValue::Key)?;
+        self.set_list(true);
+        self.ser_key(variant)?;
         Ok(self)
     }
 
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap> {
-        self.keys.push(None);
+        self.push_stack();
         Ok(self)
     }
 
@@ -427,7 +434,7 @@ impl<'a, W: Write> ser::Serializer for &'a mut Serializer<W> {
         _name: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeStruct> {
-        self.keys.push(None);
+        self.push_stack();
         Ok(self)
     }
 
@@ -450,7 +457,7 @@ impl<'a, W: Write> ser::SerializeSeq for &'a mut Serializer<W> {
     where
         V: ?Sized + Serialize,
     {
-        self.ser_kv(value, KeyValue::ValueSeq)
+        self.ser_value(value)
     }
 
     fn end(self) -> Result<()> {
@@ -466,7 +473,7 @@ impl<'a, W: Write> ser::SerializeTuple for &'a mut Serializer<W> {
     where
         V: ?Sized + Serialize,
     {
-        self.ser_kv(value, KeyValue::ValueSeq)
+        self.ser_value(value)
     }
 
     fn end(self) -> Result<()> {
@@ -482,7 +489,7 @@ impl<'a, W: Write> ser::SerializeTupleStruct for &'a mut Serializer<W> {
     where
         V: ?Sized + Serialize,
     {
-        self.ser_kv(value, KeyValue::ValueSeq)
+        self.ser_value(value)
     }
 
     fn end(self) -> Result<()> {
@@ -498,7 +505,7 @@ impl<'a, W: Write> ser::SerializeTupleVariant for &'a mut Serializer<W> {
     where
         V: ?Sized + Serialize,
     {
-        self.ser_kv(value, KeyValue::ValueSeq)
+        self.ser_value(value)
     }
 
     fn end(self) -> Result<()> {
@@ -514,18 +521,18 @@ impl<'a, W: Write> ser::SerializeMap for &'a mut Serializer<W> {
     where
         K: ?Sized + Serialize,
     {
-        self.ser_kv(key, KeyValue::Key)
+        self.ser_key(key)
     }
 
     fn serialize_value<V>(&mut self, value: &V) -> Result<()>
     where
         V: ?Sized + Serialize,
     {
-        self.ser_kv(value, KeyValue::Value)
+        self.ser_value(value)
     }
 
     fn end(self) -> Result<()> {
-        self.keys.pop();
+        self.pop_stack();
         Ok(())
     }
 }
@@ -538,14 +545,14 @@ impl<'a, W: Write> ser::SerializeStruct for &'a mut Serializer<W> {
     where
         V: ?Sized + Serialize,
     {
-        self.ser_kv(key, KeyValue::Key)?;
-        self.ser_kv(value, KeyValue::Value)
+        self.ser_key(key)?;
+        self.ser_value(value)
     }
 
     fn end(self) -> Result<()> {
-        self.keys.pop();
+        self.pop_stack();
+        self.set_nesting(self.nesting());
         self.write_linefeed()?;
-        self.set_nesting();
         Ok(())
     }
 }
@@ -703,7 +710,7 @@ string_a: first second
     }
 
     #[test]
-    fn struct_b() -> Result<(), Box<Error>> {
+    fn list_b() -> Result<(), Box<Error>> {
         let s = B {
             b: [false, true, false],
             string_b: vec!["first", "second"],
@@ -724,7 +731,7 @@ string_b: first second
     }
 
     #[test]
-    fn struct_c() -> Result<(), Box<Error>> {
+    fn list_c() -> Result<(), Box<Error>> {
         let s = C {
             ints: vec![-1234567890123456, 55555],
             string_c: vec!["first item", "second", "third", "fourth item"],
@@ -732,9 +739,9 @@ string_b: first second
         assert_eq!(
             to_string(&s)?,
             r#"ints: -1234567890123456 55555
-string_c:: first item
+string_c::first item
         : second third
-        :: fourth item
+        ::fourth item
 "#
         );
         Ok(())
@@ -746,7 +753,7 @@ string_c:: first item
         text_list: Vec<&'static str>,
     }
     #[test]
-    fn struct_d() -> Result<(), Box<Error>> {
+    fn text_list() -> Result<(), Box<Error>> {
         let s = D {
             num: 15,
             text_list: vec![
@@ -761,11 +768,10 @@ string_c:: first item
         assert_eq!(
             to_string(&s)?,
             r#"num: 15
-text_list:: first item
+text_list::first item
          : second third
-         :: fourth item
-         :
-         :: fifth
+         ::fourth item
+         ::fifth
          :: item
          : sixth
 "#
@@ -789,7 +795,7 @@ text_list:: first item
         struct_e: Vec<E>,
     }
     #[test]
-    fn struct_f() -> Result<(), Box<Error>> {
+    fn dict_list() -> Result<(), Box<Error>> {
         let s = F {
             struct_e: vec![
                 E { flag: false },
@@ -819,7 +825,7 @@ struct_e:
         option_b: Option<u32>,
     }
     #[test]
-    fn struct_g() -> Result<(), Box<Error>> {
+    fn optional() -> Result<(), Box<Error>> {
         let s = G {
             option_a: None,
             option_b: Some(37),
