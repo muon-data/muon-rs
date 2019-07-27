@@ -227,10 +227,9 @@ impl<'a> MappingIter<'a> {
 
     /// Check if the current define is a list
     fn is_list(&self) -> bool {
-        if let Some(dict) = self.stack.last() {
-            dict.list
-        } else {
-            false
+        match self.stack.last() {
+            Some(dict) => dict.list,
+            _ => false,
         }
     }
 
