@@ -91,7 +91,7 @@ impl<W: Write> Serializer<W> {
             is_key: false,
             nesting: 0,
             line: LinePos::Start,
-            separator: Separator::SingleColon,
+            separator: Separator::Normal,
         }
     }
 
@@ -141,7 +141,7 @@ impl<W: Write> Serializer<W> {
     /// Check if line should be merged
     fn is_merge_line(&self) -> bool {
         match (self.line, self.separator) {
-            (LinePos::AfterValue, Separator::SingleColon) => true,
+            (LinePos::AfterValue, Separator::Normal) => true,
             (_, _) => false,
         }
     }
@@ -244,19 +244,19 @@ impl<W: Write> Serializer<W> {
     /// Write a text item
     fn write_text(&mut self, v: &str) -> Result<()> {
         if self.is_list() && (v.contains(' ') || v.contains('\n')) {
-            self.separator = Separator::DoubleColon;
+            self.separator = Separator::TextValue;
         }
         for val in v.split('\n') {
             self.ser_item(val)?;
             match self.separator {
-                Separator::SingleColon => (),
+                Separator::Normal => (),
                 _ => {
                     self.write_linefeed()?;
-                    self.separator = Separator::DoubleColonAppend
+                    self.separator = Separator::TextAppend
                 }
             }
         }
-        self.separator = Separator::SingleColon;
+        self.separator = Separator::Normal;
         Ok(())
     }
 }
@@ -752,9 +752,9 @@ string_b: first second
         assert_eq!(
             to_string(&s)?,
             r#"ints: -1234567890123456 55555
-string_c::first item
+string_c:=first item
         : second third
-        ::fourth item
+        :=fourth item
 "#
         );
         Ok(())
@@ -781,11 +781,11 @@ string_c::first item
         assert_eq!(
             to_string(&s)?,
             r#"num: 15
-text_list::first item
+text_list:=first item
          : second third
-         ::fourth item
-         ::fifth
-         :: item
+         :=fourth item
+         :=fifth
+         :>item
          : sixth
 "#
         );

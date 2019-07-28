@@ -156,11 +156,11 @@ impl<'a> MappingIter<'a> {
             match define {
                 Define::Valid(_, _, separator, _) => {
                     match separator {
-                        Separator::DoubleColon => {
+                        Separator::TextValue => {
                             self.define = None;
                             Some(define)
                         }
-                        Separator::DoubleColonAppend => {
+                        Separator::TextAppend => {
                             // FIXME
                             self.define = None;
                             Some(define)
@@ -835,8 +835,8 @@ mod test {
     }
 
     #[test]
-    fn string_list() -> Result<(), Box<Error>> {
-        let h = "strings: one two\n       : three four\n       :: fifth item\n       : sixth\n";
+    fn text_list() -> Result<(), Box<Error>> {
+        let h = "strings: one two\n       : three four\n       :=fifth item\n       : sixth\n";
         let expected = H {
             strings: vec![
                 "one".to_string(),

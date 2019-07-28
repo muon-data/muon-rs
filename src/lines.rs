@@ -22,12 +22,11 @@ pub struct DefIter<'a> {
 /// Parse errors
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ParseError {
-    MissingKeyBeforeColon,
-    MissingColon,
-    MissingColonAfterQuote,
-    MissingSpaceAfterColon,
+    MissingKey,
     MissingLinefeed,
+    MissingSeparator,
     InvalidSchemaSeparator,
+    InvalidSeparator,
     InvalidIndent,
 }
 
@@ -62,14 +61,8 @@ enum State {
     KeyQuotedOdd(bool),
     /// Key with colon at byte offset
     KeyColon(usize),
-    /// Key with double colon at byte offset
-    KeyDoubleColon(usize),
-    /// Definition with single colon at byte offset
-    DefSingle(usize),
-    /// Definition with double colon at byte offset
-    DefDouble(usize),
-    /// Definition with double colon and space at byte offset
-    DefDoubleSpace(usize),
+    /// Definition with separator at byte offset
+    DefDone(usize, Separator),
 }
 
 /// Key/value definition
@@ -90,7 +83,7 @@ impl State {
                 ' ' => Start,
                 '#' => Comment,
                 ':' if i > 0 => KeyColon(i),
-                ':' => Error(ParseError::MissingKeyBeforeColon),
+                ':' => Error(ParseError::MissingKey),
                 '"' => KeyQuotedOdd(false),
                 _ => KeyNotQuoted,
             },
@@ -105,16 +98,13 @@ impl State {
             KeyQuotedEven(b) => match c {
                 '"' => KeyQuotedOdd(true), // doubled quote
                 ':' if b => KeyColon(i),
-                _ => Error(ParseError::MissingColonAfterQuote),
+                _ => Error(ParseError::InvalidSeparator),
             },
             KeyColon(off) => match c {
-                ' ' => DefSingle(off),
-                ':' => KeyDoubleColon(off),
-                _ => Error(ParseError::MissingSpaceAfterColon),
-            },
-            KeyDoubleColon(off) => match c {
-                ' ' => DefDoubleSpace(off),
-                _ => DefDouble(off),
+                ' ' => DefDone(off, Separator::Normal),
+                '>' => DefDone(off, Separator::TextAppend),
+                '=' => DefDone(off, Separator::TextValue),
+                _ => Error(ParseError::InvalidSeparator),
             },
             _ => self,
         }
@@ -124,7 +114,7 @@ impl State {
     fn is_done(&self) -> bool {
         use State::*;
         match self {
-            Error(_) | Comment | DefSingle(_) | DefDouble(_) => true,
+            Error(_) | Comment | DefDone(_, _) => true,
             _ => false,
         }
     }
@@ -135,25 +125,13 @@ impl State {
         match self {
             Error(err) => Line::Invalid(*err, line),
             Comment => Line::Comment(line),
-            DefSingle(off) => {
+            DefDone(off, separator) => {
                 let (key, value) = line.split_at(*off);
-                let v = value.len().min(2); // colon and space
+                let v = value.len().min(separator.as_str().len());
                 let value = &value[v..];
-                Line::Def(key, Separator::SingleColon, value)
+                Line::Def(key, *separator, value)
             }
-            DefDouble(off) => {
-                let (key, value) = line.split_at(*off);
-                let v = value.len().min(2); // colons (no space)
-                let value = &value[v..];
-                Line::Def(key, Separator::DoubleColon, value)
-            }
-            DefDoubleSpace(off) => {
-                let (key, value) = line.split_at(*off);
-                let v = value.len().min(3); // colons and space
-                let value = &value[v..];
-                Line::Def(key, Separator::DoubleColonAppend, value)
-            }
-            _ => Line::Invalid(ParseError::MissingColon, line),
+            _ => Line::Invalid(ParseError::MissingSeparator, line),
         }
     }
 }
@@ -362,18 +340,18 @@ mod test {
 
     #[test]
     fn valid_li() {
-        let a = ":::\n# Comment\n:::\n\na: value a\nb::value b\nc:: value c\n";
+        let a = ":::\n# Comment\n:::\n\na: value a\nb:=value b\nc:>value c\n";
         let mut li = LineIter::new(a);
         assert_eq!(li.next().unwrap(), Line::SchemaSeparator);
         assert_eq!(li.next().unwrap(), Line::Comment("# Comment"));
         assert_eq!(li.next().unwrap(), Line::SchemaSeparator);
         assert_eq!(li.next().unwrap(), Line::Blank);
         assert_eq!(li.next().unwrap(),
-            Line::Def("a", Separator::SingleColon, "value a"));
+            Line::Def("a", Separator::Normal, "value a"));
         assert_eq!(li.next().unwrap(),
-            Line::Def("b", Separator::DoubleColon, "value b"));
+            Line::Def("b", Separator::TextValue, "value b"));
         assert_eq!(li.next().unwrap(),
-            Line::Def("c", Separator::DoubleColonAppend, "value c"));
+            Line::Def("c", Separator::TextAppend, "value c"));
     }
 
     #[test]
@@ -382,19 +360,19 @@ mod test {
         let mut li = LineIter::new(a);
         assert_eq!(
             li.next().unwrap(),
-            Line::Invalid(ParseError::MissingKeyBeforeColon, ":value")
+            Line::Invalid(ParseError::MissingKey, ":value")
         );
         assert_eq!(
             li.next().unwrap(),
-            Line::Invalid(ParseError::MissingColon, "key value")
+            Line::Invalid(ParseError::MissingSeparator, "key value")
         );
         assert_eq!(
             li.next().unwrap(),
-            Line::Invalid(ParseError::MissingColonAfterQuote, "\"key: value\"")
+            Line::Invalid(ParseError::InvalidSeparator, "\"key: value\"")
         );
         assert_eq!(
             li.next().unwrap(),
-            Line::Invalid(ParseError::MissingSpaceAfterColon, "a:value a")
+            Line::Invalid(ParseError::InvalidSeparator, "a:value a")
         );
         assert_eq!(
             li.next().unwrap(),
@@ -413,19 +391,19 @@ mod test {
         );
         assert_eq!(
             di.next().unwrap(),
-            Define::Valid(0, "a", Separator::SingleColon, "value a")
+            Define::Valid(0, "a", Separator::Normal, "value a")
         );
         assert_eq!(
             di.next().unwrap(),
-            Define::Valid(0, "b", Separator::SingleColon, "value b")
+            Define::Valid(0, "b", Separator::Normal, "value b")
         );
         assert_eq!(
             di.next().unwrap(),
-            Define::Valid(0, "c", Separator::SingleColon, "")
+            Define::Valid(0, "c", Separator::Normal, "")
         );
         assert_eq!(
             di.next().unwrap(),
-            Define::Valid(0, "c", Separator::SingleColon, "append")
+            Define::Valid(0, "c", Separator::Normal, "append")
         );
         assert_eq!(
             di.next().unwrap(),
@@ -436,28 +414,28 @@ mod test {
     #[test]
     fn def_iter2() {
         let a =
-            "a:\n  b: 1\n  cc::this\n  c:: test\n  d:\n   x: bad\n    e: 5.5\n  f: -9\n";
+            "a:\n  b: 1\n  cc:=this\n  c:>test\n  d:\n   x: bad\n    e: 5.5\n  f: -9\n";
         let li = LineIter::new(a);
         let mut di = DefIter::new(li);
         assert_eq!(
             di.next().unwrap(),
-            Define::Valid(0, "a", Separator::SingleColon, "")
+            Define::Valid(0, "a", Separator::Normal, "")
         );
         assert_eq!(
             di.next().unwrap(),
-            Define::Valid(1, "b", Separator::SingleColon, "1")
+            Define::Valid(1, "b", Separator::Normal, "1")
         );
         assert_eq!(
             di.next().unwrap(),
-            Define::Valid(1, "cc", Separator::DoubleColon, "this")
+            Define::Valid(1, "cc", Separator::TextValue, "this")
         );
         assert_eq!(
             di.next().unwrap(),
-            Define::Valid(1, "c", Separator::DoubleColonAppend, "test")
+            Define::Valid(1, "c", Separator::TextAppend, "test")
         );
         assert_eq!(
             di.next().unwrap(),
-            Define::Valid(1, "d", Separator::SingleColon, "")
+            Define::Valid(1, "d", Separator::Normal, "")
         );
         assert_eq!(
             di.next().unwrap(),
@@ -465,11 +443,11 @@ mod test {
         );
         assert_eq!(
             di.next().unwrap(),
-            Define::Valid(2, "e", Separator::SingleColon, "5.5")
+            Define::Valid(2, "e", Separator::Normal, "5.5")
         );
         assert_eq!(
             di.next().unwrap(),
-            Define::Valid(1, "f", Separator::SingleColon, "-9")
+            Define::Valid(1, "f", Separator::Normal, "-9")
         );
     }
 }

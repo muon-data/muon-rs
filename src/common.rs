@@ -6,21 +6,21 @@
 /// Key / value separator type
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Separator {
-    /// Single colon separator
-    SingleColon,
-    /// Double colon separator (non-breaking string)
-    DoubleColon,
-    /// Double colon append separator (non-breaking string)
-    DoubleColonAppend,
+    /// Normal `: ` separator
+    Normal,
+    /// Text append `:>` separator
+    TextAppend,
+    /// Text value `:=` separator
+    TextValue,
 }
 
 impl Separator {
     /// Get the separator as a string slice
     pub fn as_str(&self) -> &'static str {
         match self {
-            Separator::SingleColon => ": ",
-            Separator::DoubleColon => "::",
-            Separator::DoubleColonAppend => ":: ",
+            Separator::Normal => ": ",
+            Separator::TextAppend => ":>",
+            Separator::TextValue => ":=",
         }
     }
 }
