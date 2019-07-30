@@ -1,0 +1,27 @@
+group:
+  label: dictators
+  person:
+    name: Genghis Khan
+    born: 1162
+    birthplace: Delüün Boldog
+  person:
+    name: Josef Stalin
+    born: 1878
+    birthplace: Gori
+  person:
+    name: Dudley Do-Right
+    born: 1961
+group:
+  label: philisophers
+  person:
+    name: Immanuel Kant
+    born: 1724
+    birthplace: Königsberg
+  person:
+    name: Arthur Schopenhauer
+    born: 1788
+    birthplace: Danzig
+  person:
+    name: René Descartes
+    born: 1596
+    birthplace: La Haye en Touraine

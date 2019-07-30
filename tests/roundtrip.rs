@@ -31,20 +31,27 @@ fn derived_de_ser() -> muon::Result<()> {
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
-struct B {
-    people: Vec<C>,
+struct Groups {
+    group: Vec<Group>,
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
-struct C {
+struct Group {
+    label: String,
+    person: Vec<Person>,
+}
+
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
+struct Person {
     name: String,
+    born: u32,
+    birthplace: Option<String>,
 }
 
 #[test]
-fn dict_list() -> muon::Result<()> {
-    let s = "people:\n   name: Genghis Khan\npeople:\n   name: Josef Stalin\npeople:\n   name: Dudley Doo-Right\n";
-    let b: B = muon::from_str(&s)?;
-    let ss = muon::to_string(&b)?;
-    assert_eq!(ss, "people:\n  name: Genghis Khan\npeople:\n  name: Josef Stalin\npeople:\n  name: Dudley Doo-Right\n");
+fn people() -> muon::Result<()> {
+    let g: Groups = muon::from_str(&include_str!("people.muon"))?;
+dbg!(&g);
+    assert_eq!(muon::to_string(&g)?, include_str!("people2.muon"));
     Ok(())
 }
