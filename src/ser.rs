@@ -243,18 +243,16 @@ impl<W: Write> Serializer<W> {
 
     /// Write a text item
     fn write_text(&mut self, v: &str) -> Result<()> {
-        if self.is_list() && (v.contains(' ') || v.contains('\n')) {
+        if self.is_list() && v.contains(' ') {
             self.separator = Separator::TextValue;
         }
         for val in v.split('\n') {
             self.ser_item(val)?;
             match self.separator {
                 Separator::Normal => (),
-                _ => {
-                    self.write_linefeed()?;
-                    self.separator = Separator::TextAppend
-                }
+                _ => self.write_linefeed()?,
             }
+            self.separator = Separator::TextAppend;
         }
         self.separator = Separator::Normal;
         Ok(())
@@ -767,35 +765,27 @@ string_c:=first item
     }
     #[test]
     fn text_list() -> Result<(), Box<Error>> {
-        let s = D {
-            num: 15,
-            text_list: vec![
-                "first item",
-                "second",
-                "third",
-                "fourth item",
-                "fifth\nitem",
-                "sixth",
-            ],
-        };
         assert_eq!(
-            to_string(&s)?,
-            r#"num: 15
-text_list:=first item
-         : second third
-         :=fourth item
-         :=fifth
-         :>item
-         : sixth
-"#
+            to_string(&D {
+                num: 15,
+                text_list: vec![
+                    "first item",
+                    "second",
+                    "third",
+                    "fourth item",
+                    "fifth\nitem",
+                    "sixth",
+                ],
+            })?,
+            "num: 15\ntext_list:=first item\n         : second third\n         :=fourth item\n         : fifth\n         :>item\n         : sixth\n"
         );
-
-        let s = D {
-            num: 12,
-            text_list: vec![],
-        };
-        assert_eq!(to_string(&s)?, "num: 12\n");
-
+        assert_eq!(
+            to_string(&D {
+                num: 12,
+                text_list: vec![],
+            })?,
+            "num: 12\n"
+        );
         Ok(())
     }
 
@@ -839,18 +829,20 @@ struct_e:
     }
     #[test]
     fn optional() -> Result<(), Box<Error>> {
-        let s = G {
-            option_a: None,
-            option_b: Some(37),
-        };
-        assert_eq!(to_string(&s)?, "option_b: 37\n");
-
-        let s = G {
-            option_a: Some(false),
-            option_b: None,
-        };
-        assert_eq!(to_string(&s)?, "option_a: false\n");
-
+        assert_eq!(
+            to_string(&G {
+                option_a: None,
+                option_b: Some(37),
+            })?,
+            "option_b: 37\n"
+        );
+        assert_eq!(
+            to_string(&G {
+                option_a: Some(false),
+                option_b: None,
+            })?,
+            "option_a: false\n"
+        );
         Ok(())
     }
 
