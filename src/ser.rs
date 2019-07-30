@@ -55,7 +55,7 @@ enum LinePos {
 /// Dictionary for mapping stack
 #[derive(Debug)]
 struct Dict {
-    /// Current key
+    /// Current key (one field in dict)
     key: Option<String>,
     /// List flag (applies to current key)
     list: bool,
@@ -63,7 +63,7 @@ struct Dict {
 
 /// MuON serializer
 pub struct Serializer<W: Write> {
-    /// Number of spaces to indent
+    /// Number of spaces per indent
     n_indent: usize,
     /// Writer for output
     writer: W,
@@ -71,8 +71,8 @@ pub struct Serializer<W: Write> {
     stack: Vec<Dict>,
     /// Flag if current item is a key
     is_key: bool,
-    /// Output nesting depth
-    nesting: usize,
+    /// Current output indent count
+    indent: usize,
     /// Current line position
     line: LinePos,
     /// Current key / value separator
@@ -89,7 +89,7 @@ impl<W: Write> Serializer<W> {
             writer,
             stack: vec![],
             is_key: false,
-            nesting: 0,
+            indent: 0,
             line: LinePos::Start,
             separator: Separator::Normal,
         }
@@ -101,8 +101,12 @@ impl<W: Write> Serializer<W> {
     }
 
     /// Pop a dict from stack
-    fn pop_stack(&mut self) {
-        self.stack.pop();
+    fn pop_stack(&mut self) -> Result<()> {
+        if let Some(_) = self.stack.pop() {
+            self.set_indent();
+            self.write_linefeed()?;
+        }
+        Ok(())
     }
 
     /// Set the top of stack to a list
@@ -124,7 +128,20 @@ impl<W: Write> Serializer<W> {
     fn set_key(&mut self, key: &str) {
         if let Some(dict) = self.stack.last_mut() {
             dict.key = Some(quoted_key(key));
-            self.set_nesting(self.nesting() - 1);
+        }
+    }
+
+    /// Set the key to blank (for repeated keys)
+    fn set_key_blank(&mut self) {
+        if let Some(dict) = self.stack.last_mut() {
+            if let Some(mut key) = dict.key.take() {
+                let len = key.chars().count();
+                key.clear();
+                for _ in 0..len {
+                    key.push(' ');
+                }
+                dict.key = Some(key);
+            }
         }
     }
 
@@ -133,9 +150,9 @@ impl<W: Write> Serializer<W> {
         self.stack.len()
     }
 
-    /// Set the output nesting depth
-    fn set_nesting(&mut self, n: usize) {
-        self.nesting = n;
+    /// Set the output indent count
+    fn set_indent(&mut self) {
+        self.indent = self.nesting();
     }
 
     /// Check if line should be merged
@@ -182,31 +199,26 @@ impl<W: Write> Serializer<W> {
 
     /// Write all necessary keys
     fn write_keys(&mut self) -> Result<()> {
-        if self.nesting == self.nesting() {
-            self.write_blank_key()?;
-        } else {
-            let n0 = self.nesting.max(1) - 1;
-            let n1 = self.nesting();
-            for n in n0..n1 {
-                self.write_key(n)?;
-                if n + 1 < n1 {
-                    write!(self.writer, ":\n")?;
-                }
+        let n0 = self.indent.max(1) - 1;
+        let n1 = self.nesting();
+        for n in n0..n1 {
+            self.write_key(n)?;
+            if n + 1 < n1 {
+                write!(self.writer, ":\n")?;
             }
-            self.set_nesting(n1);
         }
+        self.set_indent();
+        self.set_key_blank();
         Ok(write!(self.writer, "{}", self.separator.as_str())?)
     }
 
-    /// Write a blank key (with spaces instead of each char)
-    fn write_blank_key(&mut self) -> Result<()> {
+    /// Write a key
+    fn write_key(&mut self, n: usize) -> Result<()> {
         self.write_linefeed()?;
-        self.write_indent(self.nesting)?;
-        if let Some(dict) = self.stack.last() {
+        self.write_indent(n)?;
+        if let Some(dict) = self.stack.iter().nth(n) {
             if let Some(key) = &dict.key {
-                for _ in key.chars() {
-                    write!(self.writer, " ")?;
-                }
+                write!(self.writer, "{}", key)?;
             }
         }
         Ok(())
@@ -223,20 +235,8 @@ impl<W: Write> Serializer<W> {
 
     /// Write an indentation
     fn write_indent(&mut self, n: usize) -> Result<()> {
-        for _ in self.n_indent..n * self.n_indent {
+        for _ in 0..n * self.n_indent {
             write!(self.writer, " ")?;
-        }
-        Ok(())
-    }
-
-    /// Write a key
-    fn write_key(&mut self, n: usize) -> Result<()> {
-        self.write_linefeed()?;
-        self.write_indent(n + 1)?;
-        if let Some(dict) = self.stack.iter().nth(n) {
-            if let Some(key) = &dict.key {
-                write!(self.writer, "{}", key)?;
-            }
         }
         Ok(())
     }
@@ -543,8 +543,7 @@ impl<'a, W: Write> ser::SerializeMap for &'a mut Serializer<W> {
     }
 
     fn end(self) -> Result<()> {
-        self.pop_stack();
-        Ok(())
+        self.pop_stack()
     }
 }
 
@@ -561,10 +560,7 @@ impl<'a, W: Write> ser::SerializeStruct for &'a mut Serializer<W> {
     }
 
     fn end(self) -> Result<()> {
-        self.pop_stack();
-        self.set_nesting(self.nesting());
-        self.write_linefeed()?;
-        Ok(())
+        self.pop_stack()
     }
 }
 
@@ -594,7 +590,6 @@ where
 {
     let mut serializer = Serializer::new(2, vec![]);
     value.serialize(&mut serializer)?;
-    serializer.write_linefeed()?;
     Ok(String::from_utf8(serializer.writer)?)
 }
 
@@ -605,7 +600,6 @@ where
 {
     let mut serializer = Serializer::new(2, vec![]);
     value.serialize(&mut serializer)?;
-    serializer.write_linefeed()?;
     Ok(serializer.writer)
 }
 
@@ -617,7 +611,6 @@ where
 {
     let mut serializer = Serializer::new(2, writer);
     value.serialize(&mut serializer)?;
-    serializer.write_linefeed()?;
     Ok(())
 }
 
