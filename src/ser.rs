@@ -28,7 +28,7 @@ macro_rules! impl_item {
     ($i:ident $($more:ident)*) => {
         impl Item for $i {
             fn write<W: Write>(&self, writer: &mut W) -> Result<()> {
-                Ok(write!(writer, "{}", &*self.to_string())?)
+                Ok(write!(writer, "{}", *self)?)
             }
         }
         impl_item!($($more)*);
@@ -39,7 +39,7 @@ impl_item!(i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char);
 
 impl Item for &str {
     fn write<W: Write>(&self, writer: &mut W) -> Result<()> {
-        Ok(write!(writer, "{}", &*self.to_string())?)
+        Ok(write!(writer, "{}", *self)?)
     }
 }
 
