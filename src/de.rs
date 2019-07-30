@@ -13,6 +13,14 @@ use serde::de::{
 use std::io::Read;
 use std::str;
 
+/// Parsed text value
+enum TextVal<'a> {
+    /// Owned text value
+    Owned(String),
+    /// Borrowed text value
+    Borrowed(&'a str),
+}
+
 /// Dictionary mapping state
 #[derive(Debug)]
 enum DictState {
@@ -156,19 +164,14 @@ impl<'a> MappingIter<'a> {
             match define {
                 Define::Valid(_, _, separator, _) => {
                     match separator {
-                        Separator::TextValue => {
-                            self.define = None;
-                            Some(define)
-                        }
-                        Separator::TextAppend => {
-                            // FIXME
-                            self.define = None;
-                            Some(define)
-                        }
-                        _ => {
+                        Separator::Normal => {
                             let (d0, d1) = define.split_list();
                             self.define = d1;
                             Some(d0)
+                        }
+                        _ => {
+                            self.define = None;
+                            Some(define)
                         }
                     }
                 }
@@ -259,6 +262,24 @@ impl<'a> MappingIter<'a> {
         }
         false
     }
+
+    /// Check if next item is appended
+    fn is_append(&mut self) -> bool {
+        self.check_indent() && self.check_key()
+    }
+
+    /// Check if separator is a text append
+    fn is_separator_text_append(&mut self) -> bool {
+        match self.peek() {
+            Some(Define::Valid(_, _, Separator::TextAppend, _)) => true,
+            _ => false,
+        }
+    }
+
+    /// Check if next item is text appended
+    fn is_text_append(&mut self) -> bool {
+        self.is_append() && self.is_separator_text_append()
+    }
 }
 
 /// MuON deserializer
@@ -331,15 +352,26 @@ impl<'de> Deserializer<'de> {
     }
 
     /// Parse a text value
-    fn parse_text(&mut self) -> Result<&'de str> {
-        Ok(self.get_value()?)
+    fn parse_text(&mut self) -> Result<TextVal<'de>> {
+        let val = self.get_value()?;
+        if self.mappings.is_text_append() {
+            let mut value = val.to_string();
+            while self.mappings.is_text_append() {
+                value.push('\n');
+                value.push_str(self.get_value()?);
+            }
+            Ok(TextVal::Owned(value))
+        } else {
+            Ok(TextVal::Borrowed(val))
+        }
     }
 
     /// Parse a char value
     fn parse_char(&mut self) -> Result<char> {
-        let text = self.parse_text()?;
-        if text.len() == 1 {
-            if let Some(c) = text.chars().next() {
+        let text = self.get_value()?;
+        let mut chars = text.chars();
+        if let Some(c) = chars.next() {
+            if chars.next().is_none() {
                 return Ok(c);
             }
         }
@@ -483,17 +515,9 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        let val = self.parse_text()?;
-        // FIXME: handle lists of strings
-        if !self.mappings.is_list() && self.mappings.check_key() {
-            let mut value = val.to_string();
-            while self.mappings.check_key() {
-                value.push('\n');
-                value.push_str(self.parse_text()?);
-            }
-            visitor.visit_str(&value)
-        } else {
-            visitor.visit_borrowed_str(val)
+        match self.parse_text()? {
+            TextVal::Owned(val) => visitor.visit_str(&val),
+            TextVal::Borrowed(val) => visitor.visit_borrowed_str(&val),
         }
     }
 
@@ -641,7 +665,7 @@ impl<'de> SeqAccess<'de> for Deserializer<'de> {
     where
         T: DeserializeSeed<'de>,
     {
-        if self.mappings.check_indent() && self.mappings.check_key() {
+        if self.mappings.is_append() {
             seed.deserialize(&mut *self).map(Some)
         } else {
             self.mappings.set_list(false);
@@ -820,7 +844,7 @@ mod test {
 
     #[test]
     fn string_append() -> Result<(), Box<Error>> {
-        let g = "string: This is a long string\n      : for testing\n      : append definitions\n";
+        let g = "string: This is a long string\n      :>for testing\n      :>append definitions\n";
         let expected = G {
             string: "This is a long string\nfor testing\nappend definitions"
                 .to_string(),
@@ -836,18 +860,17 @@ mod test {
 
     #[test]
     fn text_list() -> Result<(), Box<Error>> {
-        let h = "strings: one two\n       : three four\n       :=fifth item\n       : sixth\n";
-        let expected = H {
+        let h = "strings: first second third\n       :>item\n       : fourth\n       :=fifth item\n       : sixth\n";
+        assert_eq!(H {
             strings: vec![
-                "one".to_string(),
-                "two".to_string(),
-                "three".to_string(),
-                "four".to_string(),
+                "first".to_string(),
+                "second".to_string(),
+                "third\nitem".to_string(),
+                "fourth".to_string(),
                 "fifth item".to_string(),
                 "sixth".to_string(),
             ],
-        };
-        assert_eq!(expected, from_str(h)?);
+        }, from_str::<H>(h)?);
         Ok(())
     }
 
