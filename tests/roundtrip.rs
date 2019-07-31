@@ -51,7 +51,6 @@ struct Person {
 #[test]
 fn people() -> muon::Result<()> {
     let g: Groups = muon::from_str(&include_str!("people.muon"))?;
-dbg!(&g);
-    assert_eq!(muon::to_string(&g)?, include_str!("people2.muon"));
+    assert_eq!(muon::to_string(&g)?, include_str!("people.muon"));
     Ok(())
 }
