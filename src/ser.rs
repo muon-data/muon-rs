@@ -192,9 +192,6 @@ impl<W: Write> Serializer<W> {
         if self.is_key {
             return Err(Error::InvalidKey);
         }
-        if let Some(dict) = self.stack.last_mut() {
-            dict.visited = true;
-        }
         if self.is_merge_line() {
             write!(self.writer, " ")?;
         } else {
@@ -224,10 +221,11 @@ impl<W: Write> Serializer<W> {
     fn write_key(&mut self, n: usize) -> Result<()> {
         self.write_linefeed()?;
         self.write_indent(n)?;
-        if let Some(dict) = self.stack.iter().nth(n) {
+        if let Some(dict) = self.stack.iter_mut().nth(n) {
             if let Some(key) = &dict.key {
                 write!(self.writer, "{}", key)?;
             }
+            dict.visited = true;
         }
         Ok(())
     }
@@ -873,6 +871,47 @@ struct_e:
                 ],
             })?,
             "list_g:\nlist_g:\n  option_b: 55\nlist_g:\n  option_a: true\nlist_g:\n  option_a: false\n  option_b: 99\nlist_g:\n"
+        );
+        Ok(())
+    }
+
+    #[derive(Serialize)]
+    struct I {
+        txt: String,
+    }
+    #[derive(Serialize)]
+    struct J {
+        option_a: Option<i32>,
+        option_b: Vec<I>,
+    }
+    #[derive(Serialize)]
+    struct K {
+        list_j: Vec<J>,
+    }
+    #[test]
+    fn list_vec() -> Result<(), Box<Error>> {
+        assert_eq!(
+            to_string(&K {
+                list_j: vec![
+                    J {
+                        option_a: Some(99),
+                        option_b: vec![I { txt: "test".to_string() }]
+                    },
+                    J {
+                        option_a: None,
+                        option_b: vec![I { txt: "abc".to_string() }]
+                    },
+                    J {
+                        option_a: Some(77),
+                        option_b: vec![I { txt: "xyz".to_string() }]
+                    },
+                    J {
+                        option_a: None,
+                        option_b: vec![]
+                    },
+                ],
+            })?,
+            "list_j:\n  option_a: 99\n  option_b:\n    txt: test\nlist_j:\n  option_b:\n    txt: abc\nlist_j:\n  option_a: 77\n  option_b:\n    txt: xyz\nlist_j:\n"
         );
         Ok(())
     }
