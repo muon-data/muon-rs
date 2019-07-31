@@ -101,6 +101,13 @@ mod test {
         assert_eq!(int("0b_1111_0000_1111"), Some(0xF0F));
         assert_eq!(int("0x123_FED"), Some(0x123_FED));
         assert_eq!(int::<u8>("0.0"), None);
+        assert_eq!(int::<u8>("255"), Some(255));
+        assert_eq!(int::<u8>("256"), None);
+        assert_eq!(int::<u8>("-1"), None);
+        assert_eq!(int::<i8>("-128"), Some(-128));
+        assert_eq!(int::<i8>("127"), Some(127));
+        assert_eq!(int::<i8>("-129"), None);
+        assert_eq!(int::<i8>("128"), None);
         assert_eq!(int::<i16>("+-0"), None);
         // assert_eq!(int::<u32>("00"), None);
         assert_eq!(int::<u32>("abc"), None);
