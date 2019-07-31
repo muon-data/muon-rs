@@ -59,6 +59,8 @@ struct Dict {
     key: Option<String>,
     /// List flag (applies to current key)
     list: bool,
+    /// Fields visited flag
+    visited: bool,
 }
 
 /// MuON serializer
@@ -97,12 +99,15 @@ impl<W: Write> Serializer<W> {
 
     /// Push a new dict onto stack
     fn push_stack(&mut self) {
-        self.stack.push(Dict { key: None, list: false });
+        self.stack.push(Dict { key: None, list: false, visited: false });
     }
 
     /// Pop a dict from stack
     fn pop_stack(&mut self) -> Result<()> {
-        if let Some(_) = self.stack.pop() {
+        if let Some(dict) = self.stack.pop() {
+            if !dict.visited {
+                self.write_unvisited_key()?;
+            }
             self.set_indent();
             self.write_linefeed()?;
         }
@@ -187,6 +192,9 @@ impl<W: Write> Serializer<W> {
         if self.is_key {
             return Err(Error::InvalidKey);
         }
+        if let Some(dict) = self.stack.last_mut() {
+            dict.visited = true;
+        }
         if self.is_merge_line() {
             write!(self.writer, " ")?;
         } else {
@@ -220,6 +228,16 @@ impl<W: Write> Serializer<W> {
             if let Some(key) = &dict.key {
                 write!(self.writer, "{}", key)?;
             }
+        }
+        Ok(())
+    }
+
+    /// Write key for unvisited dict
+    fn write_unvisited_key(&mut self) -> Result<()> {
+        let indent = self.nesting();
+        if indent > 0 {
+            self.write_key(indent - 1)?;
+            write!(self.writer, ":\n")?;
         }
         Ok(())
     }
@@ -835,6 +853,26 @@ struct_e:
                 option_b: None,
             })?,
             "option_a: false\n"
+        );
+        Ok(())
+    }
+    #[derive(Serialize)]
+    struct H {
+        list_g: Vec<G>,
+    }
+    #[test]
+    fn list_optional() -> Result<(), Box<Error>> {
+        assert_eq!(
+            to_string(&H {
+                list_g: vec![
+                    G { option_a: None, option_b: None },
+                    G { option_a: None, option_b: Some(55) },
+                    G { option_a: Some(true), option_b: None },
+                    G { option_a: Some(false), option_b: Some(99) },
+                    G { option_a: None, option_b: None },
+                ],
+            })?,
+            "list_g:\nlist_g:\n  option_b: 55\nlist_g:\n  option_a: true\nlist_g:\n  option_a: false\n  option_b: 99\nlist_g:\n"
         );
         Ok(())
     }
