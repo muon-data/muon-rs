@@ -57,6 +57,8 @@ enum LinePos {
 struct Dict {
     /// Current key (one field in dict)
     key: Option<String>,
+    /// Number of keys
+    n_keys: u32,
     /// List flag (applies to current key)
     list: bool,
     /// Fields visited flag
@@ -99,7 +101,12 @@ impl<W: Write> Serializer<W> {
 
     /// Push a new dict onto stack
     fn push_stack(&mut self) {
-        self.stack.push(Dict { key: None, list: false, visited: false });
+        self.stack.push(Dict {
+            key: None,
+            n_keys: 0,
+            list: false,
+            visited: false
+        });
     }
 
     /// Pop a dict from stack
@@ -133,6 +140,7 @@ impl<W: Write> Serializer<W> {
     fn set_key(&mut self, key: &str) {
         if let Some(dict) = self.stack.last_mut() {
             dict.key = Some(quoted_key(key));
+            dict.n_keys += 1;
         }
     }
 
@@ -208,13 +216,33 @@ impl<W: Write> Serializer<W> {
         let n1 = self.nesting();
         for n in n0..n1 {
             self.write_key(n)?;
-            if n + 1 < n1 {
-                write!(self.writer, ":\n")?;
+            match n1 - n {
+                1 => (),
+                2 if self.is_first_key() => {
+                    self.visit_dict(n + 1);
+                    break;
+                }
+                _ => write!(self.writer, ":\n")?,
             }
         }
         self.set_indent();
         self.set_key_blank();
         Ok(write!(self.writer, "{}", self.separator.as_str())?)
+    }
+
+    /// Check if the current key is the first within the dict
+    fn is_first_key(&self) -> bool {
+        match self.stack.last() {
+            Some(dict) => dict.n_keys == 1,
+            _ => false,
+        }
+    }
+
+    /// Mark a dict as visited (key has been written)
+    fn visit_dict(&mut self, n: usize) {
+        if let Some(dict) = self.stack.iter_mut().nth(n) {
+            dict.visited = true;
+        }
     }
 
     /// Write a key
@@ -225,7 +253,7 @@ impl<W: Write> Serializer<W> {
             if let Some(key) = &dict.key {
                 write!(self.writer, "{}", key)?;
             }
-            dict.visited = true;
+            self.visit_dict(n);
         }
         Ok(())
     }
@@ -818,15 +846,7 @@ string_c:=first item
         };
         assert_eq!(
             to_string(&s)?,
-            r#"struct_e:
-  flag: false
-struct_e:
-  flag: false
-struct_e:
-  flag: true
-struct_e:
-  flag: false
-"#
+            "struct_e: false\nstruct_e: false\nstruct_e: true\nstruct_e: false\n"
         );
         Ok(())
     }
@@ -870,7 +890,7 @@ struct_e:
                     G { option_a: None, option_b: None },
                 ],
             })?,
-            "list_g:\nlist_g:\n  option_b: 55\nlist_g:\n  option_a: true\nlist_g:\n  option_a: false\n  option_b: 99\nlist_g:\n"
+            "list_g:\nlist_g:\n  option_b: 55\nlist_g: true\nlist_g: false\n  option_b: 99\nlist_g:\n"
         );
         Ok(())
     }
@@ -911,7 +931,32 @@ struct_e:
                     },
                 ],
             })?,
-            "list_j:\n  option_a: 99\n  option_b:\n    txt: test\nlist_j:\n  option_b:\n    txt: abc\nlist_j:\n  option_a: 77\n  option_b:\n    txt: xyz\nlist_j:\n"
+            "list_j: 99\n  option_b: test\nlist_j:\n  option_b: abc\nlist_j: 77\n  option_b: xyz\nlist_j:\n"
+        );
+        Ok(())
+    }
+    #[derive(Serialize)]
+    struct L {
+        list_i: Vec<I>,
+    }
+    #[derive(Serialize)]
+    struct M {
+        dict_l: L,
+    }
+    #[test]
+    fn list_dict() -> Result<(), Box<Error>> {
+        assert_eq!(
+            to_string(&M {
+                dict_l: L {
+                    list_i: vec![
+                        I { txt: "abc".to_string() },
+                        I { txt: "def".to_string() },
+                        I { txt: "ghi".to_string() },
+                        I { txt: "xyz".to_string() },
+                    ],
+                }
+            })?,
+            "dict_l:\n  list_i: abc\n  list_i: def\n  list_i: ghi\n  list_i: xyz\n"
         );
         Ok(())
     }
