@@ -3,8 +3,8 @@
 // Copyright (c) 2019  Douglas Lau
 //
 use crate::common::Separator;
-use crate::error::{Error, Result};
-use crate::lines::{DefIter, Define, LineIter};
+use crate::error::{Error, ParseError, Result};
+use crate::lines::{DefIter, Define};
 use crate::parse::{self, Float, Integer};
 use serde::de::{
     self, Deserialize, DeserializeOwned, DeserializeSeed, MapAccess, SeqAccess,
@@ -139,8 +139,8 @@ impl<'a> Iterator for MappingIter<'a> {
 
 impl<'a> MappingIter<'a> {
     /// Create a new key/value mapping iterator
-    fn new(iter: LineIter<'a>) -> Self {
-        let defs = DefIter::new(iter);
+    fn new(input: &'a str) -> Self {
+        let defs = DefIter::new(input);
         let define = None;
         let stack = vec![];
         MappingIter {
@@ -161,21 +161,16 @@ impl<'a> MappingIter<'a> {
     /// Get the next define in a list
     fn next_list(&mut self) -> Option<Define<'a>> {
         if let Some(define) = self.define {
-            match define {
-                Define::Valid(_, _, separator, _) => {
-                    match separator {
-                        Separator::Normal => {
-                            let (d0, d1) = define.split_list();
-                            self.define = d1;
-                            Some(d0)
-                        }
-                        _ => {
-                            self.define = None;
-                            Some(define)
-                        }
-                    }
+            match define.separator {
+                Separator::Normal => {
+                    let (d0, d1) = define.split_list();
+                    self.define = d1;
+                    Some(d0)
                 }
-                _ => Some(define),
+                _ => {
+                    self.define = None;
+                    Some(define)
+                }
             }
         } else {
             self.define
@@ -198,12 +193,10 @@ impl<'a> MappingIter<'a> {
         let indent = self.stack.len();
         if let Some(dict) = self.stack.last_mut() {
             if let Some(key) = dict.start_first() {
-                if let Some(Define::Valid(_, _, separator, v)) =
-                    self.define.take()
-                {
-                    if v.len() > 0 && indent > 0 {
-                        self.define =
-                            Some(Define::Valid(indent - 1, key, separator, v))
+                if let Some(define) = self.define.take() {
+                    if define.value.len() > 0 && indent > 0 {
+                        self.define = Some(Define::new(indent - 1, key,
+                            define.separator, define.value))
                     }
                 }
             }
@@ -244,10 +237,9 @@ impl<'a> MappingIter<'a> {
 
     /// Check indent nesting
     fn check_indent(&mut self) -> bool {
-        if let Some(Define::Valid(indent, _, _, _)) = self.peek() {
-            self.stack.len() == indent + 1
-        } else {
-            false
+        match self.peek() {
+            Some(define) => define.check_indent(self.stack.len()),
+            None => false,
         }
     }
 
@@ -255,8 +247,8 @@ impl<'a> MappingIter<'a> {
     fn check_key(&mut self) -> bool {
         if let Some(dict) = self.stack.last() {
             if let Some(k) = dict.key {
-                if let Some(Define::Valid(_, key, _, _)) = self.peek() {
-                    return key == k;
+                if let Some(define) = self.peek() {
+                    return define.key == k;
                 }
             }
         }
@@ -271,7 +263,7 @@ impl<'a> MappingIter<'a> {
     /// Check if separator is a text append
     fn is_separator_text_append(&mut self) -> bool {
         match self.peek() {
-            Some(Define::Valid(_, _, Separator::TextAppend, _)) => true,
+            Some(define) => define.separator == Separator::TextAppend,
             _ => false,
         }
     }
@@ -289,7 +281,7 @@ pub struct Deserializer<'de> {
 
 impl<'de> Deserializer<'de> {
     fn from_str(input: &'de str) -> Self {
-        let mappings = MappingIter::new(LineIter::new(input));
+        let mappings = MappingIter::new(input);
         Deserializer { mappings }
     }
 }
@@ -325,29 +317,32 @@ where
 
 impl<'de> Deserializer<'de> {
     /// Parse a define into a result
-    fn define_result(define: Option<Define>) -> Result<Define> {
+    fn define_result(&self, define: Option<Define<'de>>) -> Result<Define<'de>>
+    {
         match define {
-            Some(Define::Invalid(e, ln)) => {
-                Err(Error::FailedParse(format!("{:?} {}", e, ln)))
-            }
             Some(define) => Ok(define),
-            None => Err(Error::UnexpectedEndOfInput),
+            None => {
+                match self.mappings.defs.error() {
+                    Some(e) => Err(Error::FailedParse(e)),
+                    None => Err(Error::FailedParse(ParseError::ExpectedMore)),
+                }
+            }
         }
     }
 
     /// Peek the current key
     fn peek_key(&mut self) -> Result<&'de str> {
-        match Deserializer::define_result(self.mappings.peek())? {
-            Define::Valid(_, k, _, _) => Ok(k),
-            _ => unreachable!(),
+        let def = self.mappings.peek();
+        match self.define_result(def)? {
+            define => Ok(define.key),
         }
     }
 
     /// Get the current value
     fn get_value(&mut self) -> Result<&'de str> {
-        match Deserializer::define_result(self.mappings.next())? {
-            Define::Valid(_, _, _, v) => Ok(v),
-            _ => unreachable!(),
+        let def = self.mappings.next();
+        match self.define_result(def)? {
+            define => Ok(define.value),
         }
     }
 
@@ -375,7 +370,7 @@ impl<'de> Deserializer<'de> {
                 return Ok(c);
             }
         }
-        Err(Error::FailedParse(format!("char: {}", text)))
+        Err(Error::FailedParse(ParseError::ExpectedChar))
     }
 
     /// Parse a bool value
@@ -384,7 +379,7 @@ impl<'de> Deserializer<'de> {
         match value {
             "true" => Ok(true),
             "false" => Ok(false),
-            _ => Err(Error::FailedParse(format!("bool: {}", value))),
+            _ => Err(Error::FailedParse(ParseError::ExpectedBool)),
         }
     }
 
@@ -394,7 +389,7 @@ impl<'de> Deserializer<'de> {
         if let Some(v) = parse::int(value) {
             Ok(v)
         } else {
-            Err(Error::FailedParse(format!("int: {}", value)))
+            Err(Error::FailedParse(ParseError::ExpectedInt))
         }
     }
 
@@ -404,7 +399,7 @@ impl<'de> Deserializer<'de> {
         if let Some(v) = parse::float(value) {
             Ok(v)
         } else {
-            Err(Error::FailedParse(format!("float: {}", value)))
+            Err(Error::FailedParse(ParseError::ExpectedFloat))
         }
     }
 }

@@ -7,6 +7,41 @@ use std::fmt::{self, Display};
 use std::io;
 use std::str;
 
+/// Parse errors
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ParseError {
+    ExpectedBool,
+    ExpectedMore,
+    ExpectedChar,
+    ExpectedFloat,
+    ExpectedInt,
+    MissingKey,
+    MissingLinefeed,
+    MissingSeparator,
+    InvalidSchemaSeparator,
+    InvalidSeparator,
+    InvalidIndent,
+}
+
+impl ParseError {
+    fn description(&self) -> &'static str {
+        use ParseError::*;
+        match self {
+            ExpectedBool => "expected bool",
+            ExpectedMore => "expected more input data",
+            ExpectedChar => "expected char",
+            ExpectedFloat => "expected float",
+            ExpectedInt => "expected int",
+            MissingKey => "missing key",
+            MissingLinefeed => "missing line feed",
+            MissingSeparator => "missing separator",
+            InvalidSchemaSeparator => "invalid schema separator",
+            InvalidSeparator => "invalid separator",
+            InvalidIndent => "invalid indent",
+        }
+    }
+}
+
 /// Errors which can occur when serializing and deserializing MuON data.
 #[derive(Debug)]
 pub enum Error {
@@ -26,10 +61,8 @@ pub enum Error {
     UnsupportedType(&'static str),
     /// Invalid key
     InvalidKey,
-    /// Unexpected end of input while deserializing
-    UnexpectedEndOfInput,
     /// Failed parse while deserializing
-    FailedParse(String),
+    FailedParse(ParseError),
 }
 
 /// MuON result type
@@ -64,8 +97,7 @@ impl std::error::Error for Error {
             Error::Deserialize(ref msg) => msg,
             Error::UnsupportedType(ref msg) => msg,
             Error::InvalidKey => "string keys only",
-            Error::UnexpectedEndOfInput => "unexpected end of input",
-            Error::FailedParse(ref msg) => msg,
+            Error::FailedParse(ref e) => e.description(),
         }
     }
 }
