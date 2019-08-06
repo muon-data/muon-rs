@@ -4,6 +4,7 @@
 //
 use crate::common::{Define, Separator};
 use crate::error::ParseError;
+use crate::schema::Schema;
 
 /// Line parsing states
 enum State {
@@ -60,6 +61,8 @@ pub struct DefIter<'a> {
     lines: LineIter<'a>,
     /// Number of spaces in one indent
     indent_spaces: Option<usize>,
+    /// Parsed schema
+    schema: Option<Schema>,
     /// Current definition (for append handling)
     define: Option<Define<'a>>,
     /// Parsing error
@@ -68,19 +71,22 @@ pub struct DefIter<'a> {
 
 impl State {
     /// Parse one character
-    fn parse_char(self, i: usize, c: char) -> Self {
+    ///
+    /// `offset` Byte offset for character
+    /// `c` Character to parse
+    fn parse_char(self, offset: usize, c: char) -> Self {
         use State::*;
         match self {
             Start => match c {
                 ' ' => Start,
                 '#' => Comment,
-                ':' if i > 0 => KeyColon(i),
+                ':' if offset > 0 => KeyColon(offset),
                 ':' => Error(ParseError::MissingKey),
                 '"' => KeyQuotedOdd(false),
                 _ => KeyNotQuoted,
             },
             KeyNotQuoted => match c {
-                ':' => KeyColon(i),
+                ':' => KeyColon(offset),
                 _ => KeyNotQuoted,
             },
             KeyQuotedOdd(b) => match c {
@@ -89,7 +95,7 @@ impl State {
             },
             KeyQuotedEven(b) => match c {
                 '"' => KeyQuotedOdd(true), // doubled quote
-                ':' if b => KeyColon(i),
+                ':' if b => KeyColon(offset),
                 _ => Error(ParseError::InvalidSeparator),
             },
             KeyColon(off) => match c {
@@ -137,8 +143,8 @@ impl<'a> Line<'a> {
             Ok(Line::SchemaSeparator)
         } else {
             let mut state = State::Start;
-            for (i, c) in line.char_indices() {
-                state = state.parse_char(i, c);
+            for (offset, c) in line.char_indices() {
+                state = state.parse_char(offset, c);
                 if state.is_done() {
                     return state.to_line(line);
                 }
@@ -148,8 +154,8 @@ impl<'a> Line<'a> {
         }
     }
 
-    /// Get line indent, if any
-    fn indent(&self) -> Option<usize> {
+    /// Get indent spaces, if any
+    fn indent_spaces(&self) -> Option<usize> {
         if let Some(key) = self.key() {
             let i = key.chars().take_while(|c| *c == ' ').count();
             if i > 0 {
@@ -192,7 +198,10 @@ impl<'a> Iterator for LineIter<'a> {
             let (line, remaining) = self.input.split_at(lf);
             self.input = &remaining[1..]; // trim linefeed
             match Line::new(line) {
-                Ok(line) => Some(line),
+                Ok(line) => {
+                    self.error = None;
+                    Some(line)
+                }
                 Err(e) => {
                     self.error = Some(e);
                     None
@@ -202,6 +211,7 @@ impl<'a> Iterator for LineIter<'a> {
             self.error = Some(ParseError::MissingLinefeed);
             None
         } else {
+            self.error = None;
             None
         }
     }
@@ -212,9 +222,18 @@ impl<'a> DefIter<'a> {
     pub fn new(input: &'a str) -> Self {
         let lines = LineIter::new(input);
         let indent_spaces = None;
+        let schema = None;
         let define = None;
         let error = None;
-        DefIter { lines, indent_spaces, define, error }
+        DefIter { lines, indent_spaces, schema, define, error }
+    }
+
+    /// Get schema
+    pub fn schema(&self) -> Option<&Schema> {
+        match &self.schema {
+            Some(schema) => Some(schema),
+            None => None,
+        }
     }
 
     /// Get most recent parse error
@@ -225,8 +244,8 @@ impl<'a> DefIter<'a> {
     /// Set the indent spaces if needed
     fn set_indent_spaces(&mut self, line: &Line<'a>) {
         if self.indent_spaces == None {
-            if let Some(indent) = line.indent() {
-                self.indent_spaces = Some(indent);
+            if let Some(indent_spaces) = line.indent_spaces() {
+                self.indent_spaces = Some(indent_spaces);
             }
         }
     }
@@ -239,6 +258,25 @@ impl<'a> DefIter<'a> {
             i + k
         } else {
             0
+        }
+    }
+
+    /// Get indent count of a key
+    fn indent_count(&self, key: &str) -> Option<usize> {
+        let mut spaces = key.chars().take_while(|c| *c == ' ').count();
+        let mut indent = 0;
+        if let Some(indent_spaces) = self.indent_spaces {
+            assert!(indent_spaces > 0);
+            while spaces >= indent_spaces {
+                spaces -= indent_spaces;
+                indent += 1;
+            }
+        }
+        if spaces == 0 {
+            Some(indent)
+        } else {
+            // Invalid indent
+            None
         }
     }
 
@@ -265,22 +303,48 @@ impl<'a> DefIter<'a> {
         Err(ParseError::InvalidIndent)
     }
 
-    /// Get indent count of a key
-    fn indent_count(&self, key: &str) -> Option<usize> {
-        let mut spaces = key.chars().take_while(|c| *c == ' ').count();
-        let mut indent = 0;
-        if let Some(indent_spaces) = self.indent_spaces {
-            assert!(indent_spaces > 0);
-            while spaces >= indent_spaces {
-                spaces -= indent_spaces;
-                indent += 1;
+    /// Process a define
+    fn process_define(&mut self, key: &'a str, separator: Separator,
+        value: &'a str) -> Result<Option<Define<'a>>, ParseError>
+    {
+        let def = self.make_define(key, separator, value)?;
+        if let (None, Some(schema)) = (&self.define, &mut self.schema) {
+            if schema.add_define(def)? {
+                return Ok(None);
             }
         }
-        if spaces == 0 {
-            Some(indent)
-        } else {
-            // Invalid indent
-            None
+        Ok(Some(def))
+    }
+
+    /// Process a schema separator
+    fn process_schema(&mut self) -> Result<Option<Define<'a>>, ParseError> {
+        match (&self.define, &mut self.schema) {
+            (None, None) => {
+                self.schema = Some(Schema::new());
+                Ok(None)
+            }
+            (None, Some(schema)) => {
+                if schema.finish() {
+                    Err(ParseError::UnexpectedSchemaSeparator)
+                } else {
+                    Ok(None)
+                }
+            }
+            (_, _) => Err(ParseError::UnexpectedSchemaSeparator),
+        }
+    }
+
+    /// Process a line
+    fn process_line(&mut self, ln: Line<'a>) -> Result<Option<Define<'a>>,
+        ParseError>
+    {
+        self.set_indent_spaces(&ln);
+        match ln {
+            Line::SchemaSeparator => self.process_schema(),
+            Line::Blank | Line::Comment(_) => Ok(None),
+            Line::Definition(key, separator, value) => {
+                self.process_define(key, separator, value)
+            }
         }
     }
 }
@@ -289,26 +353,18 @@ impl<'a> Iterator for DefIter<'a> {
     type Item = Define<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        self.error = None;
         while let Some(ln) = self.lines.next() {
-            self.set_indent_spaces(&ln);
-            match ln {
-                Line::SchemaSeparator => {
-                    self.error = Some(ParseError::InvalidSchemaSeparator);
+            match self.process_line(ln) {
+                Ok(None) => (),
+                Ok(Some(define)) => {
+                    self.define = Some(define);
+                    return Some(define);
+                }
+                Err(e) => {
+                    self.error = Some(e);
                     return None;
                 }
-                Line::Definition(key, separator, value) => {
-                    match self.make_define(key, separator, value) {
-                        Ok(def) => {
-                            self.define = Some(def);
-                            return self.define;
-                        }
-                        Err(e) => {
-                            self.error = Some(e);
-                            return None;
-                        }
-                    }
-                }
-                _ => (),
             }
         }
         self.error = self.lines.error();
@@ -355,14 +411,16 @@ mod test {
 
     #[test]
     fn def_iter() {
-        let a = ":::\na: value a\n# Comment\n\nb: value b\n\nc:\n : append\n  : bad\n";
+        let a = ":::\na: text\nb: text\nc: dict\n  d: list bool\n:::\na: value a\n# Comment\n:::\n\nb: value b\n\nc:\n : append\n  : bad\n";
         let mut di = DefIter::new(a);
-        assert_eq!(di.next(), None);
-        assert_eq!(di.error(), Some(ParseError::InvalidSchemaSeparator));
+        let d = di.next();
+        assert_ne!(d, None);
         assert_eq!(
-            di.next().unwrap(),
+            d.unwrap(),
             Define::new(0, "a", Separator::Normal, "value a")
         );
+        assert_eq!(di.next(), None);
+        assert_eq!(di.error(), Some(ParseError::UnexpectedSchemaSeparator));
         assert_eq!(
             di.next().unwrap(),
             Define::new(0, "b", Separator::Normal, "value b")

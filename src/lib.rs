@@ -14,6 +14,7 @@ mod de;
 mod error;
 mod lines;
 mod parse;
+mod schema;
 mod ser;
 
 pub use de::{from_reader, from_slice, from_str, Deserializer};

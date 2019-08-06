@@ -15,12 +15,14 @@ pub enum ParseError {
     ExpectedChar,
     ExpectedFloat,
     ExpectedInt,
+    InvalidIndent,
+    InvalidSeparator,
+    InvalidType,
     MissingKey,
     MissingLinefeed,
     MissingSeparator,
-    InvalidSchemaSeparator,
-    InvalidSeparator,
-    InvalidIndent,
+    UnexpectedKey,
+    UnexpectedSchemaSeparator,
 }
 
 impl ParseError {
@@ -32,12 +34,14 @@ impl ParseError {
             ExpectedChar => "expected char",
             ExpectedFloat => "expected float",
             ExpectedInt => "expected int",
+            InvalidIndent => "invalid indent",
+            InvalidSeparator => "invalid separator",
+            InvalidType => "invalid type",
             MissingKey => "missing key",
             MissingLinefeed => "missing line feed",
             MissingSeparator => "missing separator",
-            InvalidSchemaSeparator => "invalid schema separator",
-            InvalidSeparator => "invalid separator",
-            InvalidIndent => "invalid indent",
+            UnexpectedKey => "unexpected key",
+            UnexpectedSchemaSeparator => "unexpected schema separator",
         }
     }
 }

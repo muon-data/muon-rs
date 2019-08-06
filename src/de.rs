@@ -407,12 +407,12 @@ impl<'de> Deserializer<'de> {
 impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     type Error = Error;
 
-    fn deserialize_any<V>(self, visitor: V) -> Result<V::Value>
+    fn deserialize_any<V>(self, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
         // FIXME: use schema to know what types to return
-        self.deserialize_str(visitor)
+        Err(Error::FailedParse(ParseError::UnexpectedKey))
     }
 
     fn deserialize_ignored_any<V>(self, visitor: V) -> Result<V::Value>
@@ -696,7 +696,7 @@ impl<'de> MapAccess<'de> for Deserializer<'de> {
 
 #[cfg(test)]
 mod test {
-    use super::{from_str, Error};
+    use super::{from_str, Error, ParseError};
     use serde_derive::Deserialize;
 
     #[derive(Deserialize, PartialEq, Debug)]
@@ -845,6 +845,10 @@ mod test {
                 .to_string(),
         };
         assert_eq!(expected, from_str(g)?);
+        match from_str::<G>("string: test\njunk: stuff\n") {
+            Err(Error::FailedParse(ParseError::UnexpectedKey)) => (),
+            e => panic!("{:?}", e),
+        }
         Ok(())
     }
 
