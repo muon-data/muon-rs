@@ -4,10 +4,10 @@
 //
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
-//! # MuON
+//! ## muon-rs
 //!
-//! Serialize / deserialize [MuON](https://github.com/muon-data/muon.git)
-//! files in Rust.
+//! A Rust library for the [MuON](https://github.com/muon-data/muon) data
+//! format, using [serde](https://serde.rs).
 
 mod common;
 mod de;
