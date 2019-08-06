@@ -2,9 +2,9 @@
 //
 // Copyright (c) 2019  Douglas Lau
 //
-use crate::common::Separator;
+use crate::common::{Define, Separator};
 use crate::error::{Error, ParseError, Result};
-use crate::lines::{DefIter, Define};
+use crate::lines::DefIter;
 use crate::parse::{self, Float, Integer};
 use serde::de::{
     self, Deserialize, DeserializeOwned, DeserializeSeed, MapAccess, SeqAccess,
