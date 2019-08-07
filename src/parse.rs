@@ -31,7 +31,7 @@ impl Float for f64 {}
 
 /// Parse an integer from a string slice
 pub fn int<T: Integer>(v: &str) -> Option<T> {
-    T::from_str(v).ok().or_else(|| int_fallback(v))
+    v.parse().ok().or_else(|| int_fallback(v))
 }
 
 /// Fallback for integer parsing
@@ -45,15 +45,15 @@ fn int_fallback<T: Integer>(v: &str) -> Option<T> {
     } else if v.starts_with("0x") {
         T::from_str_radix(&sanitize_num(&v[2..], 16), 16)
     } else {
-        T::from_str(&sanitize_num(v, 10)).ok()
+        sanitize_num(v, 10).parse().ok()
     }
 }
 
 /// Parse a float from a string slice
 pub fn float<T: Float>(v: &str) -> Option<T> {
-    T::from_str(v)
+    v.parse()
         .ok()
-        .or_else(|| T::from_str(&sanitize_num(v, 10)).ok())
+        .or_else(|| sanitize_num(v, 10).parse().ok())
 }
 
 /// Sanitize a number, removing valid underscores
