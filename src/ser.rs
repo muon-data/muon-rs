@@ -661,6 +661,7 @@ where
 #[cfg(test)]
 mod test {
     use super::{to_string, Error};
+    use super::super::datetime::*;
     use serde_derive::Serialize;
     use std::collections::HashMap;
 
@@ -957,6 +958,26 @@ string_c:=first item
                 }
             })?,
             "dict_l:\n  list_i: abc\n  list_i: def\n  list_i: ghi\n  list_i: xyz\n"
+        );
+        Ok(())
+    }
+
+    #[derive(Serialize)]
+    struct N {
+        name: String,
+        date: Date,
+        time: Time,
+        datetime: DateTime,
+    }
+    #[test]
+    fn date() -> Result<(), Box<Error>> {
+        let date = "2019-08-07".parse().map_err(|e| Error::FailedParse(e))?;
+        let time = "12:34:56.789".parse().map_err(|e| Error::FailedParse(e))?;
+        let datetime = "1999-12-31T23:59:59.999-00:00".parse()
+            .map_err(|e| Error::FailedParse(e))?;
+        assert_eq!(
+            to_string(&N { name: "one day".to_string(), date, time, datetime })?,
+            "name: one day\ndate: 2019-08-07\ntime: 12:34:56.789\ndatetime: 1999-12-31T23:59:59.999-00:00\n"
         );
         Ok(())
     }

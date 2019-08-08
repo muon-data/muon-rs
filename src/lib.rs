@@ -10,6 +10,7 @@
 //! format, using [serde](https://serde.rs).
 
 mod common;
+mod datetime;
 mod de;
 mod error;
 mod lines;
@@ -17,6 +18,7 @@ mod parse;
 mod schema;
 mod ser;
 
+pub use datetime::{Date, DateTime, Time, TimeOffset};
 pub use de::{from_reader, from_slice, from_str, Deserializer};
 pub use error::{Error, Result};
 pub use ser::{to_string, to_vec, to_writer, Serializer};

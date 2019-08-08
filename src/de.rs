@@ -697,6 +697,7 @@ impl<'de> MapAccess<'de> for Deserializer<'de> {
 #[cfg(test)]
 mod test {
     use super::{from_str, Error, ParseError};
+    use super::super::datetime::*;
     use serde_derive::Deserialize;
 
     #[derive(Deserialize, PartialEq, Debug)]
@@ -937,6 +938,26 @@ mod test {
             ],
         };
         assert_eq!(expected, from_str(j)?);
+        Ok(())
+    }
+
+    #[derive(Deserialize, PartialEq, Debug)]
+    struct M {
+        name: String,
+        date: Date,
+        time: Time,
+        datetime: DateTime,
+    }
+    #[test]
+    fn datetime() -> Result<(), Box<Error>> {
+        let date = "2019-08-07".parse().map_err(|e| Error::FailedParse(e))?;
+        let time = "12:34:56.789".parse().map_err(|e| Error::FailedParse(e))?;
+        let datetime = "1999-12-31T23:59:59.999-00:00".parse()
+            .map_err(|e| Error::FailedParse(e))?;
+        assert_eq!(
+            M { name: "one day".to_string(), date, time, datetime },
+            from_str("name: one day\ndate: 2019-08-07\ntime: 12:34:56.789\ndatetime: 1999-12-31T23:59:59.999-00:00\n")?
+        );
         Ok(())
     }
 
