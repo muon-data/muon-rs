@@ -8,7 +8,7 @@
 //!
 //! A Rust library for the [MuON](https://github.com/muon-data/muon) data
 //! format, using [serde](https://serde.rs).
-
+//!
 mod common;
 mod datetime;
 mod de;
