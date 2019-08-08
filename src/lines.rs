@@ -62,7 +62,7 @@ pub struct DefIter<'a> {
     /// Number of spaces in one indent
     indent_spaces: Option<usize>,
     /// Parsed schema
-    schema: Option<Schema>,
+    schema: Option<Schema<'a>>,
     /// Current definition (for append handling)
     define: Option<Define<'a>>,
     /// Parsing error

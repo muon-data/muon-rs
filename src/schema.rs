@@ -3,7 +3,9 @@
 // Copyright (c) 2019  Douglas Lau
 //
 use crate::common::Define;
+use crate::datetime::{Date, DateTime, Time};
 use crate::error::ParseError;
+use std::str::FromStr;
 
 /// Representation of any valid MuON value
 #[derive(Debug)]
@@ -15,9 +17,12 @@ pub enum Value {
     Bool(bool),
 //    Int(Integer),
 //    Float(Float),
-//    DateTime(DateTime),
-//    Date(Date),
-//    Time(Time),
+    /// Date and time with offset
+    DateTime(DateTime),
+    /// Date with no time or offset
+    Date(Date),
+    /// Time with no date or offset
+    Time(Time),
 //    Dict(Map<String, Value>),
     /// Optional value
     Optional(Option<Box<Value>>),
@@ -36,11 +41,11 @@ pub enum Modifier {
 
 /// Schema Node
 #[derive(Debug)]
-pub struct Node {
+pub struct Node<'a> {
     /// Indent level
     indent: usize,
     /// Type name
-    name: String,
+    name: &'a str,
     /// Type modifier
     modifier: Option<Modifier>,
     /// Node type
@@ -72,16 +77,16 @@ pub enum Type {
 
 /// Full schema
 #[derive(Debug)]
-pub struct Schema {
+pub struct Schema<'a> {
     /// List of all nodes
-    nodes: Vec<Node>,
+    nodes: Vec<Node<'a>>,
     /// Flag indicating reading finished
     finished: bool,
 }
 
 impl Modifier {
-    /// Create a type modifier from a string slice
-    fn from_str(val: &str) -> (Option<Self>, &str) {
+    /// Create a type modifier from start of a string slice
+    fn from_str_start(val: &str) -> (Option<Self>, &str) {
         let v: Vec<&str> = val.splitn(2, ' ').collect();
         if v.len() > 1 {
             match v[0] {
@@ -95,9 +100,10 @@ impl Modifier {
     }
 }
 
-impl Type {
-    /// Create a type from a string slice
-    fn from_str(val: &str) -> Result<Self, ParseError> {
+impl FromStr for Type {
+    type Err = ParseError;
+
+    fn from_str(val: &str) -> Result<Self, Self::Err> {
         match val {
             "text" => Ok(Type::Text),
             "bool" => Ok(Type::Bool),
@@ -112,16 +118,16 @@ impl Type {
     }
 }
 
-impl Node {
+impl<'a> Node<'a> {
     /// Create a schema node from a definition
-    fn from_define(define: Define) -> Result<Self, ParseError> {
+    fn from_define(define: Define<'a>) -> Result<Self, ParseError> {
         let indent = define.indent;
-        let name = define.key.to_string();
+        let name = define.key;
         let value = define.value;
-        let (modifier, value) = Modifier::from_str(value);
+        let (modifier, value) = Modifier::from_str_start(value);
         let v: Vec<&str> = value.splitn(2, ' ').collect();
         if v.len() > 0 {
-            let node_type = Type::from_str(v[0])?;
+            let node_type = v[0].parse()?;
             // FIXME: parse default value
             let default = None;
             Ok(Node { indent, name, modifier, node_type, default })
@@ -145,7 +151,7 @@ impl Node {
     }
 }
 
-impl Schema {
+impl<'a> Schema<'a> {
     /// Create a new schema
     pub fn new() -> Self {
         let nodes = vec![];
@@ -154,7 +160,7 @@ impl Schema {
     }
 
     /// Add node
-    fn add_node(&mut self, node: Node) -> Result<(), ParseError> {
+    fn add_node(&mut self, node: Node<'a>) -> Result<(), ParseError> {
         if node.is_indent_valid(self.nodes.last()) {
             self.nodes.push(node);
             Ok(())
@@ -164,7 +170,7 @@ impl Schema {
     }
 
     /// Add a define
-    pub fn add_define(&mut self, def: Define) -> Result<bool, ParseError> {
+    pub fn add_define(&mut self, def: Define<'a>) -> Result<bool, ParseError> {
         if self.finished {
             Ok(false)
         } else {
