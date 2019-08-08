@@ -19,7 +19,7 @@ use std::str::FromStr;
 /// let time = datetime.time();
 /// let offset = datetime.time_offset();
 /// ```
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DateTime {
     date: Date,
     time: Time,
@@ -37,7 +37,7 @@ pub struct DateTime {
 /// let month = date.month();
 /// let day = date.day();
 /// ```
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Date {
     year: u16,
     month: u8,
@@ -56,7 +56,7 @@ pub struct Date {
 /// let second = time.second();
 /// let nanosecond = time.nanosecond();
 /// ```
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Time {
     hour: u8,
     minute: u8,
@@ -73,11 +73,11 @@ pub struct Time {
 /// let offset = "-05:00".parse::<TimeOffset>().unwrap();
 /// let seconds = offset.seconds();
 /// ```
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TimeOffset(_TimeOffset);
 
 /// Private time offset
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum _TimeOffset {
     Z,
     Positive(u8, u8),
@@ -279,16 +279,16 @@ impl DateTime {
         Err(ParseError::ExpectedDateTime)
     }
     /// Get the date
-    pub fn date(&self) -> &Date {
-        &self.date
+    pub fn date(&self) -> Date {
+        self.date
     }
     /// Get the time
-    pub fn time(&self) -> &Time {
-        &self.time
+    pub fn time(&self) -> Time {
+        self.time
     }
     /// Get the time offset
-    pub fn time_offset(&self) -> &TimeOffset {
-        &self.time_offset
+    pub fn time_offset(&self) -> TimeOffset {
+        self.time_offset
     }
 }
 
@@ -375,16 +375,12 @@ impl Date {
 
 impl fmt::Display for Time {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.nanosecond == 0 {
-            write!(f, "{:02}:{:02}:{:02}", self.hour, self.minute, self.second)
+        write!(f, "{:02}:{:02}:{:02}", self.hour, self.minute, self.second)?;
+        if self.nanosecond > 0 {
+            let ns = format!("{:09}", self.nanosecond);
+            write!(f, ".{}", ns.trim_end_matches('0'))
         } else {
-            let mut ns = self.nanosecond;
-            // FIXME: this is probably slow
-            while ns % 10 == 0 {
-                ns /= 10;
-            }
-            write!(f, "{:02}:{:02}:{:02}.{}", self.hour, self.minute,
-                self.second, ns)
+            Ok(())
         }
     }
 }
