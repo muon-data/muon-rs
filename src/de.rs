@@ -716,7 +716,7 @@ mod test {
             int: -5,
         };
         assert_eq!(expected, from_str(a)?);
-        let a = "b: true\nuint: 0xF00D\nint: 0b1111_0000_1111\n";
+        let a = "b: true\nuint: xF00D\nint: b1111_0000_1111\n";
         let expected = A {
             b: true,
             uint: 0xF00D,
@@ -890,7 +890,7 @@ mod test {
             float: None,
         };
         assert_eq!(expected, from_str(i)?);
-        let i = "int: 0xfab\n";
+        let i = "int: xfab\n";
         let expected = I {
             flag: None,
             int: Some(0xFAB),

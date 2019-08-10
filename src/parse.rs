@@ -36,14 +36,10 @@ pub fn int<T: Integer>(v: &str) -> Option<T> {
 
 /// Fallback for integer parsing
 fn int_fallback<T: Integer>(v: &str) -> Option<T> {
-    if v.starts_with("0b_") {
-        T::from_str_radix(&sanitize_num(&v[3..], 2), 2)
-    } else if v.starts_with("0b") {
-        T::from_str_radix(&sanitize_num(&v[2..], 2), 2)
-    } else if v.starts_with("0x_") {
-        T::from_str_radix(&sanitize_num(&v[3..], 16), 16)
-    } else if v.starts_with("0x") {
-        T::from_str_radix(&sanitize_num(&v[2..], 16), 16)
+    if v.starts_with("b") {
+        T::from_str_radix(&sanitize_num(&v[1..], 2), 2)
+    } else if v.starts_with("x") {
+        T::from_str_radix(&sanitize_num(&v[1..], 16), 16)
     } else {
         sanitize_num(v, 10).parse().ok()
     }
@@ -86,20 +82,21 @@ mod test {
     #[test]
     fn ints() {
         assert_eq!(int("0"), Some(0));
+        assert_eq!(int("00"), Some(0));
+        assert_eq!(int("005"), Some(5));
         assert_eq!(int("25"), Some(25));
         assert_eq!(int("-42"), Some(-42));
         assert_eq!(int("+15"), Some(15));
-        assert_eq!(int("0b101010"), Some(42u8));
-        assert_eq!(int::<u32>("0o755"), None);
-        assert_eq!(int("0x1Ac"), Some(428));
-        assert_eq!(int("0xffff"), Some(0xFFFFu16));
-        assert_eq!(int("0x1234567890"), Some(0x1234567890i64));
-        assert_eq!(int("0x1000000000000000"), Some(0x1000000000000000u64));
-        assert_eq!(int("0x10000000000000000"), Some(0x10000000000000000u128));
+        assert_eq!(int("b101010"), Some(42u8));
+        assert_eq!(int("x1Ac"), Some(428));
+        assert_eq!(int("xffff"), Some(0xFFFFu16));
+        assert_eq!(int("x1234567890"), Some(0x1234567890i64));
+        assert_eq!(int("x1000000000000000"), Some(0x1000000000000000u64));
+        assert_eq!(int("x10000000000000000"), Some(0x10000000000000000u128));
         assert_eq!(int("1_234_567_890"), Some(1234567890));
         assert_eq!(int("-12_34_56"), Some(-123456));
-        assert_eq!(int("0b_1111_0000_1111"), Some(0xF0F));
-        assert_eq!(int("0x123_FED"), Some(0x123_FED));
+        assert_eq!(int("b1111_0000_1111"), Some(0xF0F));
+        assert_eq!(int("x123_FED"), Some(0x123_FED));
         assert_eq!(int::<u8>("0.0"), None);
         assert_eq!(int::<u8>("255"), Some(255));
         assert_eq!(int::<u8>("256"), None);
@@ -109,10 +106,11 @@ mod test {
         assert_eq!(int::<i8>("-129"), None);
         assert_eq!(int::<i8>("128"), None);
         assert_eq!(int::<i16>("+-0"), None);
-        // assert_eq!(int::<u32>("00"), None);
         assert_eq!(int::<u32>("abc"), None);
+        assert_eq!(int::<u32>("0o755"), None);
         assert_eq!(int::<i32>("0b0000_"), None);
         assert_eq!(int::<i32>("0b0000__0000"), None);
+        assert_eq!(int::<i32>("0xBEEF"), None);
     }
 
     #[test]
