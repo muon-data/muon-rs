@@ -16,7 +16,7 @@ pub enum Value {
     /// Boolean value
     Bool(bool),
 //    Int(Integer),
-//    Float(Float),
+//    Number(Number),
     /// Date and time with offset
     DateTime(DateTime),
     /// Date with no time or offset
@@ -63,8 +63,8 @@ pub enum Type {
     Bool,
     /// Integer type
     Int,
-    /// Float type
-    Float,
+    /// Number type
+    Number,
     /// Date-time type
     DateTime,
     /// Date type
@@ -108,7 +108,7 @@ impl FromStr for Type {
             "text" => Ok(Type::Text),
             "bool" => Ok(Type::Bool),
             "int" => Ok(Type::Int),
-            "float" => Ok(Type::Float),
+            "number" => Ok(Type::Number),
             "datetime" => Ok(Type::DateTime),
             "date" => Ok(Type::Date),
             "time" => Ok(Type::Time),

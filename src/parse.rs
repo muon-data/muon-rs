@@ -23,11 +23,11 @@ macro_rules! impl_integer {
 
 impl_integer!(i8 i16 i32 i64 i128 u8 u16 u32 u64 u128);
 
-/// Marker trait for float types
-pub trait Float: FromStr {}
+/// Marker trait for number types
+pub trait Number: FromStr {}
 
-impl Float for f32 {}
-impl Float for f64 {}
+impl Number for f32 {}
+impl Number for f64 {}
 
 /// Parse an integer from a string slice
 pub fn int<T: Integer>(v: &str) -> Option<T> {
@@ -49,8 +49,8 @@ fn int_fallback<T: Integer>(v: &str) -> Option<T> {
     }
 }
 
-/// Parse a float from a string slice
-pub fn float<T: Float>(v: &str) -> Option<T> {
+/// Parse a number from a string slice
+pub fn number<T: Number>(v: &str) -> Option<T> {
     v.parse()
         .ok()
         .or_else(|| sanitize_num(v, 10).parse().ok())
@@ -116,28 +116,28 @@ mod test {
     }
 
     #[test]
-    fn floats() {
-        assert_eq!(float::<f32>("+3.14159").unwrap(), 3.14159);
-        assert_eq!(float::<f32>("-0.0").unwrap(), -0.0);
-        assert_eq!(float::<f32>("1e15").unwrap(), 1e15);
-        assert_eq!(float::<f32>("0.5431e-28").unwrap(), 0.5431e-28);
-        assert_eq!(float::<f32>(".123456").unwrap(), 0.123456);
-        assert_eq!(float::<f32>("0.1e1_2").unwrap(), 0.1e12);
-        assert_eq!(float::<f32>("8_765.432_1").unwrap(), 8_765.432_1);
-        assert_eq!(float::<f32>("100").unwrap(), 100.0);
-        assert!(float::<f32>("123_.456").is_none());
-        assert!(float::<f32>("_123.456").is_none());
-        assert!(float::<f32>("123.456_").is_none());
-        assert!(float::<f32>("123._456").is_none());
-        assert!(float::<f32>("12.34.56").is_none());
-        assert_eq!(float::<f32>("NaN").unwrap().to_string(), "NaN");
-        assert_eq!(float::<f64>("-123.456789e0").unwrap(), -123.456789);
-        assert_eq!(float::<f64>("inf").unwrap(), std::f64::INFINITY);
-        assert_eq!(float::<f64>("-inf").unwrap(), std::f64::NEG_INFINITY);
-        assert!(float::<f64>("1__0.0").is_none());
-        assert!(float::<f64>("infinity").is_none());
-        assert!(float::<f64>("INF").is_none());
-        assert!(float::<f64>("nan").is_none());
-        assert!(float::<f64>("nAn").is_none());
+    fn numbers() {
+        assert_eq!(number::<f32>("+3.14159").unwrap(), 3.14159);
+        assert_eq!(number::<f32>("-0.0").unwrap(), -0.0);
+        assert_eq!(number::<f32>("1e15").unwrap(), 1e15);
+        assert_eq!(number::<f32>("0.5431e-28").unwrap(), 0.5431e-28);
+        assert_eq!(number::<f32>(".123456").unwrap(), 0.123456);
+        assert_eq!(number::<f32>("0.1e1_2").unwrap(), 0.1e12);
+        assert_eq!(number::<f32>("8_765.432_1").unwrap(), 8_765.432_1);
+        assert_eq!(number::<f32>("100").unwrap(), 100.0);
+        assert!(number::<f32>("123_.456").is_none());
+        assert!(number::<f32>("_123.456").is_none());
+        assert!(number::<f32>("123.456_").is_none());
+        assert!(number::<f32>("123._456").is_none());
+        assert!(number::<f32>("12.34.56").is_none());
+        assert_eq!(number::<f32>("NaN").unwrap().to_string(), "NaN");
+        assert_eq!(number::<f64>("-123.456789e0").unwrap(), -123.456789);
+        assert_eq!(number::<f64>("inf").unwrap(), std::f64::INFINITY);
+        assert_eq!(number::<f64>("-inf").unwrap(), std::f64::NEG_INFINITY);
+        assert!(number::<f64>("1__0.0").is_none());
+        assert!(number::<f64>("infinity").is_none());
+        assert!(number::<f64>("INF").is_none());
+        assert!(number::<f64>("nan").is_none());
+        assert!(number::<f64>("nAn").is_none());
     }
 }

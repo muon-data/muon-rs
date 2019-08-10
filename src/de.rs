@@ -5,7 +5,7 @@
 use crate::common::{Define, Separator};
 use crate::error::{Error, ParseError, Result};
 use crate::lines::DefIter;
-use crate::parse::{self, Float, Integer};
+use crate::parse::{self, Integer, Number};
 use serde::de::{
     self, Deserialize, DeserializeOwned, DeserializeSeed, MapAccess, SeqAccess,
     Visitor,
@@ -393,13 +393,13 @@ impl<'de> Deserializer<'de> {
         }
     }
 
-    /// Parse a float value
-    fn parse_float<T: Float>(&mut self) -> Result<T> {
+    /// Parse a number value
+    fn parse_number<T: Number>(&mut self) -> Result<T> {
         let value = self.get_value()?;
-        if let Some(v) = parse::float(value) {
+        if let Some(v) = parse::number(value) {
             Ok(v)
         } else {
-            Err(Error::FailedParse(ParseError::ExpectedFloat))
+            Err(Error::FailedParse(ParseError::ExpectedNumber))
         }
     }
 }
@@ -489,14 +489,14 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        visitor.visit_f32(self.parse_float()?)
+        visitor.visit_f32(self.parse_number()?)
     }
 
     fn deserialize_f64<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        visitor.visit_f64(self.parse_float()?)
+        visitor.visit_f64(self.parse_number()?)
     }
 
     fn deserialize_char<V>(self, visitor: V) -> Result<V::Value>
@@ -760,7 +760,7 @@ mod test {
     }
 
     #[test]
-    fn floats() -> Result<(), Box<Error>> {
+    fn numbers() -> Result<(), Box<Error>> {
         let c = "float: +3.14159\ndouble: -123.456789e0\n";
         let expected = C {
             float: 3.14159,
