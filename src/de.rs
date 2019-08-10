@@ -21,43 +21,43 @@ enum TextVal<'a> {
     Borrowed(&'a str),
 }
 
-/// Dictionary mapping state
+/// Branch state
 #[derive(Debug)]
-enum DictState {
-    /// Starting dict mapping
+enum BranchState {
+    /// Starting branch
     Start,
     /// Visiting fields of mapping
     Visit,
-    /// Clean up dict mapping
+    /// Clean up branch
     Cleanup,
 }
 
-/// Dictionary for mapping stack
+/// Branch for stack
 #[derive(Debug)]
-struct Dict<'a> {
+struct Branch<'a> {
     /// Field names
     fields: &'static [&'static str],
     /// Flags for visited fields (same length as fields)
     visited: Vec<bool>,
-    /// Dictionary mapping state
-    state: DictState,
+    /// Branch state
+    state: BranchState,
     /// Current key (should match one field)
     key: Option<&'a str>,
     /// List flag (applies to current key)
     list: bool,
 }
 
-impl<'a> Dict<'a> {
-    /// Create a new Dict mapping
+impl<'a> Branch<'a> {
+    /// Create a new Branch
     fn new(is_root: bool, fields: &'static [&'static str]) -> Self {
         let visited = vec![false; fields.len()];
-        // root dict does not have a Define, so doesn't need Start state
+        // root branch does not have a Define, so doesn't need Start state
         let state = if is_root {
-            DictState::Visit
+            BranchState::Visit
         } else {
-            DictState::Start
+            BranchState::Start
         };
-        Dict {
+        Branch {
             fields,
             visited,
             state,
@@ -69,10 +69,10 @@ impl<'a> Dict<'a> {
     /// If in Start state, get first field
     fn start_first(&mut self) -> Option<&'a str> {
         let first = match (&self.state, self.fields.first()) {
-            (DictState::Start, Some(field)) => Some(*field),
+            (BranchState::Start, Some(field)) => Some(*field),
             _ => None,
         };
-        self.state = DictState::Visit;
+        self.state = BranchState::Visit;
         first
     }
 
@@ -100,7 +100,7 @@ impl<'a> Dict<'a> {
 
     /// Cleanup state for one field
     fn cleanup_visit(&mut self) -> Option<&'static str> {
-        if let DictState::Cleanup = self.state {
+        if let BranchState::Cleanup = self.state {
             for i in 0..self.fields.len() {
                 if !self.visited[i] {
                     self.visited[i] = true;
@@ -118,8 +118,8 @@ struct MappingIter<'a> {
     defs: DefIter<'a>,
     /// Current define
     define: Option<Define<'a>>,
-    /// Stack of nested dicts
-    stack: Vec<Dict<'a>>,
+    /// Stack of nested branches
+    stack: Vec<Branch<'a>>,
 }
 
 impl<'a> Iterator for MappingIter<'a> {
@@ -177,22 +177,22 @@ impl<'a> MappingIter<'a> {
         }
     }
 
-    /// Push onto the mapping stack
+    /// Push onto the branch stack
     fn push_stack(&mut self, fields: &'static [&'static str]) {
         let is_root = self.stack.len() == 0;
-        self.stack.push(Dict::new(is_root, fields))
+        self.stack.push(Branch::new(is_root, fields))
     }
 
-    /// Pop from the mapping stack
+    /// Pop from the branch stack
     fn pop_stack(&mut self) {
         self.stack.pop();
     }
 
-    /// Check if dict is in Start state
+    /// Check if branch is in Start state
     fn check_start(&mut self) {
         let indent = self.stack.len();
-        if let Some(dict) = self.stack.last_mut() {
-            if let Some(key) = dict.start_first() {
+        if let Some(branch) = self.stack.last_mut() {
+            if let Some(key) = branch.start_first() {
                 if let Some(define) = self.define.take() {
                     if define.value.len() > 0 && indent > 0 {
                         self.define = Some(Define::new(indent - 1, key,
@@ -205,9 +205,9 @@ impl<'a> MappingIter<'a> {
 
     /// Check if cleanup is needed
     fn check_cleanup(&mut self) -> bool {
-        if let Some(dict) = self.stack.last_mut() {
-            dict.state = DictState::Cleanup;
-            dict.has_unvisited()
+        if let Some(branch) = self.stack.last_mut() {
+            branch.state = BranchState::Cleanup;
+            branch.has_unvisited()
         } else {
             false
         }
@@ -215,22 +215,22 @@ impl<'a> MappingIter<'a> {
 
     /// Set the current key on stack
     fn set_key(&mut self, key: Option<&'a str>) {
-        if let Some(dict) = self.stack.last_mut() {
-            dict.visit(key)
+        if let Some(branch) = self.stack.last_mut() {
+            branch.visit(key)
         }
     }
 
     /// Set the top of stack to a list
     fn set_list(&mut self, list: bool) {
-        if let Some(dict) = self.stack.last_mut() {
-            dict.list = list
+        if let Some(branch) = self.stack.last_mut() {
+            branch.list = list
         }
     }
 
     /// Check if the current define is a list
     fn is_list(&self) -> bool {
         match self.stack.last() {
-            Some(dict) => dict.list,
+            Some(branch) => branch.list,
             _ => false,
         }
     }
@@ -245,8 +245,8 @@ impl<'a> MappingIter<'a> {
 
     /// Check that key matches
     fn check_key(&mut self) -> bool {
-        if let Some(dict) = self.stack.last() {
-            if let Some(k) = dict.key {
+        if let Some(branch) = self.stack.last() {
+            if let Some(k) = branch.key {
                 if let Some(define) = self.peek() {
                     return define.key == k;
                 }
@@ -541,8 +541,8 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        if let Some(dict) = self.mappings.stack.last() {
-            if let DictState::Cleanup = dict.state {
+        if let Some(branch) = self.mappings.stack.last() {
+            if let BranchState::Cleanup = branch.state {
                 return visitor.visit_none();
             }
         }
@@ -642,8 +642,8 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        if let Some(dict) = self.mappings.stack.last_mut() {
-            if let Some(field) = dict.cleanup_visit() {
+        if let Some(branch) = self.mappings.stack.last_mut() {
+            if let Some(field) = branch.cleanup_visit() {
                 return visitor.visit_borrowed_str(field);
             }
         }

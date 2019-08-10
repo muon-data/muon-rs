@@ -52,10 +52,10 @@ enum LinePos {
     AfterValue,
 }
 
-/// Dictionary for mapping stack
+/// Branch for stack
 #[derive(Debug)]
-struct Dict {
-    /// Current key (one field in dict)
+struct Branch {
+    /// Current key (one field in branch)
     key: Option<String>,
     /// Number of keys
     n_keys: u32,
@@ -71,8 +71,8 @@ pub struct Serializer<W: Write> {
     n_indent: usize,
     /// Writer for output
     writer: W,
-    /// Stack of dict values
-    stack: Vec<Dict>,
+    /// Stack of branch values
+    stack: Vec<Branch>,
     /// Flag if current item is a key
     is_key: bool,
     /// Current output indent count
@@ -99,9 +99,9 @@ impl<W: Write> Serializer<W> {
         }
     }
 
-    /// Push a new dict onto stack
+    /// Push a new branch onto stack
     fn push_stack(&mut self) {
-        self.stack.push(Dict {
+        self.stack.push(Branch {
             key: None,
             n_keys: 0,
             list: false,
@@ -109,10 +109,10 @@ impl<W: Write> Serializer<W> {
         });
     }
 
-    /// Pop a dict from stack
+    /// Pop a branch from stack
     fn pop_stack(&mut self) -> Result<()> {
-        if let Some(dict) = self.stack.pop() {
-            if !dict.visited {
+        if let Some(branch) = self.stack.pop() {
+            if !branch.visited {
                 self.write_unvisited_key()?;
             }
             self.set_indent();
@@ -123,37 +123,37 @@ impl<W: Write> Serializer<W> {
 
     /// Set the top of stack to a list
     fn set_list(&mut self, list: bool) {
-        if let Some(dict) = self.stack.last_mut() {
-            dict.list = list
+        if let Some(branch) = self.stack.last_mut() {
+            branch.list = list
         }
     }
 
     /// Check if the current define is a list
     fn is_list(&self) -> bool {
         match self.stack.last() {
-            Some(dict) => dict.list,
+            Some(branch) => branch.list,
             _ => false,
         }
     }
 
     /// Set the current key
     fn set_key(&mut self, key: &str) {
-        if let Some(dict) = self.stack.last_mut() {
-            dict.key = Some(quoted_key(key));
-            dict.n_keys += 1;
+        if let Some(branch) = self.stack.last_mut() {
+            branch.key = Some(quoted_key(key));
+            branch.n_keys += 1;
         }
     }
 
     /// Set the key to blank (for repeated keys)
     fn set_key_blank(&mut self) {
-        if let Some(dict) = self.stack.last_mut() {
-            if let Some(mut key) = dict.key.take() {
+        if let Some(branch) = self.stack.last_mut() {
+            if let Some(mut key) = branch.key.take() {
                 let len = key.chars().count();
                 key.clear();
                 for _ in 0..len {
                     key.push(' ');
                 }
-                dict.key = Some(key);
+                branch.key = Some(key);
             }
         }
     }
@@ -219,7 +219,7 @@ impl<W: Write> Serializer<W> {
             match n1 - n {
                 1 => (),
                 2 if self.is_first_key() => {
-                    self.visit_dict(n + 1);
+                    self.visit_branch(n + 1);
                     break;
                 }
                 _ => write!(self.writer, ":\n")?,
@@ -230,18 +230,18 @@ impl<W: Write> Serializer<W> {
         Ok(write!(self.writer, "{}", self.separator.as_str())?)
     }
 
-    /// Check if the current key is the first within the dict
+    /// Check if the current key is the first within the branch
     fn is_first_key(&self) -> bool {
         match self.stack.last() {
-            Some(dict) => dict.n_keys == 1,
+            Some(branch) => branch.n_keys == 1,
             _ => false,
         }
     }
 
-    /// Mark a dict as visited (key has been written)
-    fn visit_dict(&mut self, n: usize) {
-        if let Some(dict) = self.stack.iter_mut().nth(n) {
-            dict.visited = true;
+    /// Mark a branch as visited (key has been written)
+    fn visit_branch(&mut self, n: usize) {
+        if let Some(branch) = self.stack.iter_mut().nth(n) {
+            branch.visited = true;
         }
     }
 
@@ -249,16 +249,16 @@ impl<W: Write> Serializer<W> {
     fn write_key(&mut self, n: usize) -> Result<()> {
         self.write_linefeed()?;
         self.write_indent(n)?;
-        if let Some(dict) = self.stack.iter_mut().nth(n) {
-            if let Some(key) = &dict.key {
+        if let Some(branch) = self.stack.iter_mut().nth(n) {
+            if let Some(key) = &branch.key {
                 write!(self.writer, "{}", key)?;
             }
-            self.visit_dict(n);
+            self.visit_branch(n);
         }
         Ok(())
     }
 
-    /// Write key for unvisited dict
+    /// Write key for unvisited branch
     fn write_unvisited_key(&mut self) -> Result<()> {
         let indent = self.nesting();
         if indent > 0 {
