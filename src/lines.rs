@@ -153,28 +153,6 @@ impl<'a> Line<'a> {
             state.parse_char(line.len(), ' ').to_line(line)
         }
     }
-
-    /// Get indent spaces, if any
-    fn indent_spaces(&self) -> Option<usize> {
-        if let Some(key) = self.key() {
-            let i = key.chars().take_while(|c| *c == ' ').count();
-            if i > 0 {
-                Some(i)
-            } else {
-                None
-            }
-        } else {
-            None
-        }
-    }
-
-    /// Get the key for a definition
-    pub fn key(&self) -> Option<&'a str> {
-        match self {
-            Line::Definition(key, _, _) => Some(key),
-            _ => None,
-        }
-    }
 }
 
 impl<'a> LineIter<'a> {
@@ -217,6 +195,16 @@ impl<'a> Iterator for LineIter<'a> {
     }
 }
 
+/// Get key indent, if any
+fn key_indent(key: &str) -> Option<usize> {
+    let i = key.chars().take_while(|c| *c == ' ').count();
+    if i > 0 && i < key.chars().count() {
+        Some(i)
+    } else {
+        None
+    }
+}
+
 impl<'a> DefIter<'a> {
     /// Create a new definition iterator
     pub fn new(input: &'a str) -> Self {
@@ -242,11 +230,19 @@ impl<'a> DefIter<'a> {
     }
 
     /// Set the indent spaces if needed
-    fn set_indent_spaces(&mut self, line: &Line<'a>) {
+    fn set_indent_spaces(&mut self, key: &'a str) -> Result<(), ParseError> {
         if self.indent_spaces == None {
-            if let Some(indent_spaces) = line.indent_spaces() {
-                self.indent_spaces = Some(indent_spaces);
+            match key_indent(key) {
+                // Only 2, 3 or 4 space indents are valid
+                Some(sp) if sp >= 2 && sp <= 4 => {
+                    self.indent_spaces = Some(sp);
+                    Ok(())
+                }
+                Some(_) => Err(ParseError::InvalidIndent),
+                None => Ok(()),
             }
+        } else {
+            Ok(())
         }
     }
 
@@ -307,6 +303,7 @@ impl<'a> DefIter<'a> {
     fn process_define(&mut self, key: &'a str, separator: Separator,
         value: &'a str) -> Result<Option<Define<'a>>, ParseError>
     {
+        self.set_indent_spaces(key)?;
         let def = self.make_define(key, separator, value)?;
         if let (None, Some(schema)) = (&self.define, &mut self.schema) {
             if schema.add_define(def)? {
@@ -338,7 +335,6 @@ impl<'a> DefIter<'a> {
     fn process_line(&mut self, ln: Line<'a>) -> Result<Option<Define<'a>>,
         ParseError>
     {
-        self.set_indent_spaces(&ln);
         match ln {
             Line::SchemaSeparator => self.process_schema(),
             Line::Blank | Line::Comment(_) => Ok(None),
@@ -411,7 +407,7 @@ mod test {
 
     #[test]
     fn def_iter() {
-        let a = ":::\na: text\nb: text\nc: dict\n  d: list bool\n:::\na: value a\n# Comment\n:::\n\nb: value b\n\nc:\n : append\n  : bad\n";
+        let a = ":::\na: text\nb: text\nc: record\n  d: list bool\n:::\na: value a\n# Comment\n:::\n\nb: value b\n\nc:\n : append\n  : bad\n";
         let mut di = DefIter::new(a);
         let d = di.next();
         assert_ne!(d, None);

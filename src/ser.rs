@@ -853,7 +853,7 @@ string_c:=first item
         struct_e: Vec<E>,
     }
     #[test]
-    fn dict_list() -> Result<(), Box<Error>> {
+    fn record_list() -> Result<(), Box<Error>> {
         let s = F {
             struct_e: vec![
                 E { flag: false },
@@ -959,13 +959,13 @@ string_c:=first item
     }
     #[derive(Serialize)]
     struct M {
-        dict_l: L,
+        record_l: L,
     }
     #[test]
-    fn list_dict() -> Result<(), Box<Error>> {
+    fn list_record() -> Result<(), Box<Error>> {
         assert_eq!(
             to_string(&M {
-                dict_l: L {
+                record_l: L {
                     list_i: vec![
                         I { txt: "abc".to_string() },
                         I { txt: "def".to_string() },
@@ -974,7 +974,7 @@ string_c:=first item
                     ],
                 }
             })?,
-            "dict_l:\n  list_i: abc\n  list_i: def\n  list_i: ghi\n  list_i: xyz\n"
+            "record_l:\n  list_i: abc\n  list_i: def\n  list_i: ghi\n  list_i: xyz\n"
         );
         Ok(())
     }

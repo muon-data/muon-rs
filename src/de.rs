@@ -26,7 +26,7 @@ enum TextVal<'a> {
 enum BranchState {
     /// Starting branch
     Start,
-    /// Visiting fields of mapping
+    /// Visiting fields of branch
     Visit,
     /// Clean up branch
     Cleanup,
@@ -151,11 +151,14 @@ impl<'a> MappingIter<'a> {
     }
 
     /// Peek at next define
-    fn peek(&mut self) -> Option<Define<'a>> {
+    fn peek(&mut self) -> Result<Option<Define<'a>>> {
+        if let Some(e) = self.defs.error() {
+            return Err(Error::FailedParse(e));
+        }
         if self.define.is_none() {
             self.define = self.defs.next();
         }
-        self.define
+        Ok(self.define)
     }
 
     /// Get the next define in a list
@@ -236,41 +239,41 @@ impl<'a> MappingIter<'a> {
     }
 
     /// Check indent nesting
-    fn check_indent(&mut self) -> bool {
-        match self.peek() {
-            Some(define) => define.check_indent(self.stack.len()),
-            None => false,
+    fn check_indent(&mut self) -> Result<bool> {
+        match self.peek()? {
+            Some(define) => Ok(define.check_indent(self.stack.len())),
+            None => Ok(false),
         }
     }
 
     /// Check that key matches
-    fn check_key(&mut self) -> bool {
+    fn check_key(&mut self) -> Result<bool> {
         if let Some(branch) = self.stack.last() {
             if let Some(k) = branch.key {
-                if let Some(define) = self.peek() {
-                    return define.key == k;
+                if let Some(define) = self.peek()? {
+                    return Ok(define.key == k);
                 }
             }
         }
-        false
+        Ok(false)
     }
 
     /// Check if next item is appended
-    fn is_append(&mut self) -> bool {
-        self.check_indent() && self.check_key()
+    fn is_append(&mut self) -> Result<bool> {
+        Ok(self.check_indent()? && self.check_key()?)
     }
 
     /// Check if separator is a text append
-    fn is_separator_text_append(&mut self) -> bool {
-        match self.peek() {
-            Some(define) => define.separator == Separator::TextAppend,
-            _ => false,
+    fn is_separator_text_append(&mut self) -> Result<bool> {
+        match self.peek()? {
+            Some(define) => Ok(define.separator == Separator::TextAppend),
+            _ => Ok(false),
         }
     }
 
     /// Check if next item is text appended
-    fn is_text_append(&mut self) -> bool {
-        self.is_append() && self.is_separator_text_append()
+    fn is_text_append(&mut self) -> Result<bool> {
+        Ok(self.is_append()? && self.is_separator_text_append()?)
     }
 }
 
@@ -376,6 +379,7 @@ where
     R: Read,
     T: DeserializeOwned,
 {
+    // FIXME: this should be optimized
     let mut s = String::new();
     reader.read_to_string(&mut s)?;
     from_str(&s)
@@ -400,7 +404,7 @@ impl<'de> Deserializer<'de> {
 
     /// Peek the current key
     fn peek_key(&mut self) -> Result<&'de str> {
-        let def = self.mappings.peek();
+        let def = self.mappings.peek()?;
         match self.define_result(def)? {
             define => Ok(define.key),
         }
@@ -417,9 +421,9 @@ impl<'de> Deserializer<'de> {
     /// Parse a text value
     fn parse_text(&mut self) -> Result<TextVal<'de>> {
         let val = self.get_value()?;
-        if self.mappings.is_text_append() {
+        if self.mappings.is_text_append()? {
             let mut value = val.to_string();
-            while self.mappings.is_text_append() {
+            while self.mappings.is_text_append()? {
                 value.push('\n');
                 value.push_str(self.get_value()?);
             }
@@ -480,6 +484,9 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: Visitor<'de>,
     {
         // FIXME: use schema to know what types to return
+        if let Some(branch) = self.mappings.stack.last() {
+            dbg!(&branch.key);
+        }
         Err(Error::FailedParse(ParseError::UnexpectedKey))
     }
 
@@ -728,7 +735,7 @@ impl<'de> SeqAccess<'de> for Deserializer<'de> {
     where
         T: DeserializeSeed<'de>,
     {
-        if self.mappings.is_append() {
+        if self.mappings.is_append()? {
             seed.deserialize(&mut *self).map(Some)
         } else {
             self.mappings.set_list(false);
@@ -746,7 +753,7 @@ impl<'de> MapAccess<'de> for Deserializer<'de> {
         K: DeserializeSeed<'de>,
     {
         self.mappings.check_start();
-        if self.mappings.check_indent() || self.mappings.check_cleanup() {
+        if self.mappings.check_indent()? || self.mappings.check_cleanup() {
             seed.deserialize(&mut *self).map(Some)
         } else {
             self.mappings.pop_stack();
@@ -907,7 +914,7 @@ mod test {
     }
 
     #[test]
-    fn string_append() -> Result<(), Box<Error>> {
+    fn text_append() -> Result<(), Box<Error>> {
         let g = "string: This is a long string\n      :>for testing\n      :>append definitions\n";
         let expected = G {
             string: "This is a long string\nfor testing\nappend definitions"
@@ -987,7 +994,7 @@ mod test {
     }
 
     #[test]
-    fn dict_list() -> Result<(), Box<Error>> {
+    fn record_list() -> Result<(), Box<Error>> {
         let j = "person:\n   name: Genghis Khan\n   score: 500\nperson:\n   name: Josef Stalin\n   score: 250\nperson:\n   name: Dudley Do-Right\n   score: 800\n";
         let expected = J {
             person: vec![
@@ -1030,7 +1037,7 @@ mod test {
     }
 
     #[test]
-    fn dict_default() -> Result<(), Box<Error>> {
+    fn record_default() -> Result<(), Box<Error>> {
         let j = "person: Immanuel Kant\n  score: 600\nperson: Arthur Schopenhauer\n  score: 225\nperson: René Descartes\n  score: 400\n";
         let expected = J {
             person: vec![

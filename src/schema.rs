@@ -23,6 +23,7 @@ pub enum Value {
     Date(Date),
     /// Time with no date or offset
     Time(Time),
+//    Record(Map<Value, Value>),
 //    Dict(Map<String, Value>),
     /// Optional value
     Optional(Option<Box<Value>>),
@@ -57,22 +58,27 @@ pub struct Node<'a> {
 /// Schema Type
 #[derive(Debug)]
 pub enum Type {
-    /// Text type
+    /// Text is a `String`
     Text,
-    /// Boolean type
+    /// Boolean is a `bool`
     Bool,
-    /// Integer type
+    /// Integer is a signed or unsigned int
     Int,
-    /// Number type
+    /// Number parses into `f64` or `f32`
     Number,
-    /// Date-time type
+    /// Date-time parses into [DateTime](struct.DateTime.html)
     DateTime,
-    /// Date type
+    /// Date parses into [Date](struct.Date.html)
     Date,
-    /// Time type
+    /// Time parses into [Time](struct.Time.html)
     Time,
-    /// Dict type
-    Dict,
+    /// Record parses into a struct or
+    /// [Value::Record](enum.Value.html#variant.Record)
+    Record,
+    /// Dictionary parses into [HashMap](struct.HashMap.html)
+    Dictionary,
+    /// Any type
+    Any,
 }
 
 /// Full schema
@@ -93,7 +99,7 @@ impl Modifier {
                 "optional" => (Some(Modifier::Optional), v[1]),
                 "list" => (Some(Modifier::List), v[1]),
                 _ => (None, v[0]),
-            } 
+            }
         } else {
             (None, v[0])
         }
@@ -112,9 +118,11 @@ impl FromStr for Type {
             "datetime" => Ok(Type::DateTime),
             "date" => Ok(Type::Date),
             "time" => Ok(Type::Time),
-            "dict" => Ok(Type::Dict),
+            "record" => Ok(Type::Record),
+            "dictionary" => Ok(Type::Dictionary),
+            "any" => Ok(Type::Any),
             _ => Err(ParseError::InvalidType),
-        } 
+        }
     }
 }
 
@@ -143,7 +151,9 @@ impl<'a> Node<'a> {
             Some(prev) => {
                 self.indent <= prev.indent ||
                 match prev.node_type {
-                    Type::Dict => self.indent == prev.indent + 1,
+                    Type::Record | Type::Dictionary | Type::Any => {
+                        self.indent == prev.indent + 1
+                    }
                     _ => false,
                 }
             }
