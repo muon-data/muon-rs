@@ -274,7 +274,7 @@ impl<'a> MappingIter<'a> {
     }
 }
 
-/// MuON deserializer
+/// Structure that can deserialize MuON into values.
 pub struct Deserializer<'de> {
     mappings: MappingIter<'de>,
 }
@@ -286,7 +286,31 @@ impl<'de> Deserializer<'de> {
     }
 }
 
-/// Deserialize a MuON document from a string slice
+/// Deserialize `T` from a string slice containing MuON
+///
+/// # Example
+/// ```
+/// use serde_derive::Deserialize;
+///
+/// #[derive(Debug, Deserialize)]
+/// struct Person {
+///     name: String,
+///     born: u32,
+///     birthplace: Option<String>,
+/// }
+/// let muon = "name: Arthur Schopenhauer\nborn: 1788\nbirthplace: Danzig\n";
+/// let person: Person = muon_rs::from_str(muon).unwrap();
+/// println!("{:?}", person);
+/// ```
+///
+/// # Errors
+///
+/// An error will be returned if the conversion cannot be performed.
+/// This can occur for a number of reasons:
+/// * The MuON data is malformed
+/// * The structure of the MuON data does not match the structure of `T`
+/// * A required field is missing
+/// * A value is too big to fit within a primitive defined by `T`
 pub fn from_str<'a, T>(s: &'a str) -> Result<T>
 where
     T: Deserialize<'a>,
@@ -296,7 +320,32 @@ where
     Ok(t)
 }
 
-/// Deserialize a MuON document from a byte slice
+/// Deserialize `T` from a byte slice containing MuON
+///
+/// # Example
+/// ```
+/// use serde_derive::Deserialize;
+///
+/// #[derive(Debug, Deserialize)]
+/// struct Person {
+///     name: String,
+///     born: u32,
+///     birthplace: Option<String>,
+/// }
+/// let muon = b"name: Arthur Schopenhauer\nborn: 1788\nbirthplace: Danzig\n";
+/// let person: Person = muon_rs::from_slice(muon).unwrap();
+/// println!("{:?}", person);
+/// ```
+///
+/// # Errors
+///
+/// An error will be returned if the conversion cannot be performed.
+/// This can occur for a number of reasons:
+/// * The slice contains invalid UTF-8
+/// * The MuON data is malformed
+/// * The structure of the MuON data does not match the structure of `T`
+/// * A required field is missing
+/// * A value is too big to fit within a primitive defined by `T`
 pub fn from_slice<'a, T>(v: &'a [u8]) -> Result<T>
 where
     T: Deserialize<'a>,
@@ -304,7 +353,24 @@ where
     from_str(str::from_utf8(v)?)
 }
 
-/// Deserialize a MuON document from a reader
+/// Deserialize `T` from a reader IO stream containing MuON
+///
+/// This may call many short reads, so wrapping the reader with
+/// [`std::io::BufReader`].
+///
+/// [`std::io::BufReader`]: https://doc.rust-lang.org/std/io/struct.BufReader.html
+///
+/// FIXME: add example
+///
+/// # Errors
+///
+/// An error will be returned if the conversion cannot be performed.
+/// This can occur for a number of reasons:
+/// * An IO error is encountered from reader
+/// * The MuON data is malformed
+/// * The structure of the MuON data does not match the structure of `T`
+/// * A required field is missing
+/// * A value is too big to fit within a primitive defined by `T`
 pub fn from_reader<R, T>(mut reader: R) -> Result<T>
 where
     R: Read,
@@ -314,6 +380,8 @@ where
     reader.read_to_string(&mut s)?;
     from_str(&s)
 }
+
+// FIXME: add a from_value function
 
 impl<'de> Deserializer<'de> {
     /// Parse a define into a result

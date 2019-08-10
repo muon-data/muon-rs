@@ -65,7 +65,7 @@ struct Branch {
     visited: bool,
 }
 
-/// MuON serializer
+/// Structure that can serialize values into MuON.
 pub struct Serializer<W: Write> {
     /// Number of spaces per indent
     n_indent: usize,
@@ -627,7 +627,12 @@ impl<'a, W: Write> ser::SerializeStructVariant for &'a mut Serializer<W> {
     }
 }
 
-/// Serialize a value to a string in MuON format
+/// Serialize `T` to a String in MuON format
+///
+/// # Errors
+///
+/// Serialization can fail if the serializer for `T` returns an error.
+/// Also, some types are not supported, such as enums and byte arrays.
 pub fn to_string<T>(value: &T) -> Result<String>
 where
     T: Serialize,
@@ -637,7 +642,12 @@ where
     Ok(String::from_utf8(serializer.writer)?)
 }
 
-/// Serialize a value to a Vec of bytes in MuON format
+/// Serialize `T` to a Vec of bytes in MuON format
+///
+/// # Errors
+///
+/// Serialization can fail if the serializer for `T` returns an error.
+/// Also, some types are not supported, such as enums and byte arrays.
 pub fn to_vec<T>(value: &T) -> Result<Vec<u8>>
 where
     T: Serialize,
@@ -647,7 +657,12 @@ where
     Ok(serializer.writer)
 }
 
-/// Serialize a value to a writer in MuON format
+/// Serialize `T` to an IO writer in MuON format
+///
+/// # Errors
+///
+/// Serialization can fail if the serializer for `T` returns an error.
+/// Also, some types are not supported, such as enums and byte arrays.
 pub fn to_writer<W, T>(writer: W, value: &T) -> Result<()>
 where
     W: Write,
@@ -657,6 +672,8 @@ where
     value.serialize(&mut serializer)?;
     Ok(())
 }
+
+// FIXME: add a to_value function
 
 #[cfg(test)]
 mod test {
