@@ -305,13 +305,13 @@ impl<W: Write> Serializer<W> {
 
 /// Create a quoted key
 fn quoted_key(k: &str) -> String {
-    if is_quoting_required(k) {
+    if is_quoting_required(k) || is_quoting_suggested(k) {
         let mut s = String::new();
         s.push('"');
         for c in k.chars() {
             s.push(c);
             if c == '"' {
-                s.push(c);
+                s.push('"');
             }
         }
         s.push('"');
@@ -327,6 +327,49 @@ fn is_quoting_required(k: &str) -> bool {
         || k.starts_with('"')
         || k.starts_with('#')
         || k.contains(':')
+}
+
+/// Check if quoting is suggested for a key
+fn is_quoting_suggested(k: &str) -> bool {
+    starts_with_whitespace(k) || contains_problematic_characters(k)
+}
+
+/// Check if a string starts with whitespace
+fn starts_with_whitespace(k: &str) -> bool {
+    if let Some(c) = k.chars().next() {
+        c.is_whitespace()
+    } else {
+        false
+    }
+}
+
+/// Check if a string contains any problematic characters
+fn contains_problematic_characters(k: &str) -> bool {
+    k.chars().any(|c| c.is_control() || is_colon_homoglyph(c))
+}
+
+/// Check if a character is a homoglyph of colon
+fn is_colon_homoglyph(c: char) -> bool {
+    // If this was a performance problem, we could use phf crate
+    c == '\u{02D0}' || // ː Modifier Letter Triangular Colon
+    c == '\u{02F8}' || // ˸ Modifier Letter Raised Colon
+    c == '\u{0703}' || // ܃ Syriac Supralinear Colon
+    c == '\u{0704}' || // ܄ Syriac Sublinear Colon
+    c == '\u{0708}' || // ܈ Syriac Supralinear Colon Skewed Left
+    c == '\u{0709}' || // ܉ Syriac Sublinear Colon Skewed Right
+    c == '\u{1365}' || // ፥ Ethiopic Colon
+    c == '\u{1366}' || // ፦ Ethiopic Preface Colon
+    c == '\u{1804}' || // ᠄ Mongolian Colon
+    c == '\u{2254}' || // ≔ Colon Equals
+    c == '\u{2255}' || // ≕ Equals Colon
+    c == '\u{2982}' || // ⦂Z Notation Type Colon
+    c == '\u{2A74}' || // ⩴ Double Colon Equal
+    c == '\u{2AF6}' || // ⫶ Triple Colon Operator
+    c == '\u{A789}' || // ꞉ Modifier Letter Colon
+    c == '\u{FE13}' || // ︓Presentation Form For Vertical Colon
+    c == '\u{FE55}' || // ﹕Small Colon
+    c == '\u{FF1A}' || // ：Fullwidth Colon
+    c == '\u{E003A}'  // 󠀺 Tag Colon
 }
 
 impl<'a, W: Write> ser::Serializer for &'a mut Serializer<W> {
@@ -1022,7 +1065,11 @@ string_c:=first item
 
         let mut m = HashMap::new();
         m.insert("\ttabby key".to_string(), "value".to_string());
-        assert_eq!(to_string(&m)?, "\ttabby key: value\n");
+        assert_eq!(to_string(&m)?, "\"\ttabby key\": value\n");
+
+        let mut m = HashMap::new();
+        m.insert("key：fake value, ".to_string(), "value".to_string());
+        assert_eq!(to_string(&m)?, "\"key：fake value, \": value\n");
         Ok(())
     }
 }
