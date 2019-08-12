@@ -24,8 +24,8 @@ enum TextVal<'a> {
 /// Branch state
 #[derive(Debug)]
 enum BranchState {
-    /// Starting branch
-    Start,
+    /// First field of branch
+    First,
     /// Visiting fields of branch
     Visit,
     /// Clean up branch
@@ -45,35 +45,37 @@ struct Branch<'a> {
     key: Option<&'a str>,
     /// List flag (applies to current key)
     list: bool,
+    /// Substitute key
+    substitute: Option<&'a str>,
 }
 
 impl<'a> Branch<'a> {
-    /// Create a new Branch
-    fn new(is_root: bool, fields: &'static [&'static str]) -> Self {
+    /// Create a new Branch with fields
+    fn with_fields(fields: &'static [&'static str]) -> Self {
         let visited = vec![false; fields.len()];
-        // root branch does not have a Define, so doesn't need Start state
-        let state = if is_root {
-            BranchState::Visit
-        } else {
-            BranchState::Start
-        };
         Branch {
             fields,
             visited,
-            state,
+            state: BranchState::First,
             key: None,
             list: false,
+            substitute: None,
         }
     }
 
-    /// If in Start state, get first field
-    fn start_first(&mut self) -> Option<&'a str> {
-        let first = match (&self.state, self.fields.first()) {
-            (BranchState::Start, Some(field)) => Some(*field),
+    /// Create a new Branch
+    fn new() -> Self {
+        let mut branch = Branch::with_fields(&[]);
+        branch.state = BranchState::Visit;
+        branch
+    }
+
+    /// Get first field
+    fn first_field(&self) -> Option<&'a str> {
+        match self.fields.first() {
+            Some(field) => Some(*field),
             _ => None,
-        };
-        self.state = BranchState::Visit;
-        first
+        }
     }
 
     /// Visit one field
@@ -90,12 +92,7 @@ impl<'a> Branch<'a> {
 
     /// Check for any unvisited fields
     fn has_unvisited(&self) -> bool {
-        for i in 0..self.fields.len() {
-            if !self.visited[i] {
-                return true;
-            }
-        }
-        false
+        self.visited.iter().any(|v| !v)
     }
 
     /// Cleanup state for one field
@@ -109,6 +106,11 @@ impl<'a> Branch<'a> {
             }
         }
         None
+    }
+
+    /// Check if current field is substitute
+    fn is_substitute(&self) -> bool {
+        self.key.is_some() && self.key == self.substitute
     }
 }
 
@@ -180,10 +182,9 @@ impl<'a> MappingIter<'a> {
         }
     }
 
-    /// Push onto the branch stack
-    fn push_stack(&mut self, fields: &'static [&'static str]) {
-        let is_root = self.stack.len() == 0;
-        self.stack.push(Branch::new(is_root, fields))
+    /// Push branch onto the stack
+    fn push_stack(&mut self, branch: Branch<'a>) {
+        self.stack.push(branch)
     }
 
     /// Pop from the branch stack
@@ -191,19 +192,41 @@ impl<'a> MappingIter<'a> {
         self.stack.pop();
     }
 
-    /// Check if branch is in Start state
-    fn check_start(&mut self) {
+    /// Check if record is first field
+    fn check_first_record(&mut self) -> bool {
+        if let Some(branch) = self.stack.last_mut() {
+            match branch.state {
+                BranchState::First => {
+                    branch.state = BranchState::Visit;
+                    true
+                }
+                _ => false,
+            }
+        } else {
+            false
+        }
+    }
+
+    /// Check record substitute
+    fn check_substitute(&mut self, first_record: bool) -> Result<()> {
         let indent = self.stack.len();
         if let Some(branch) = self.stack.last_mut() {
-            if let Some(key) = branch.start_first() {
+            if let Some(key) = branch.first_field() {
                 if let Some(define) = self.define.take() {
                     if define.value.len() > 0 && indent > 0 {
+                        if first_record {
+                            return Err(Error::FailedParse(
+                                ParseError::InvalidSubstitute
+                            ));
+                        }
+                        branch.substitute = Some(key);
                         self.define = Some(Define::new(indent - 1, key,
                             define.separator, define.value))
                     }
                 }
             }
         }
+        Ok(())
     }
 
     /// Check if cleanup is needed
@@ -226,7 +249,8 @@ impl<'a> MappingIter<'a> {
     /// Set the top of stack to a list
     fn set_list(&mut self, list: bool) {
         if let Some(branch) = self.stack.last_mut() {
-            branch.list = list
+            branch.list = list;
+            branch.state = BranchState::Visit;
         }
     }
 
@@ -617,6 +641,9 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: Visitor<'de>,
     {
         if let Some(branch) = self.mappings.stack.last() {
+            if branch.is_substitute() {
+                return Err(Error::FailedParse(ParseError::InvalidSubstitute));
+            }
             if let BranchState::Cleanup = branch.state {
                 return visitor.visit_none();
             }
@@ -684,7 +711,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        self.mappings.push_stack(&[]);
+        self.mappings.push_stack(Branch::new());
         visitor.visit_map(self)
     }
 
@@ -697,7 +724,9 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        self.mappings.push_stack(fields);
+        let first_record = self.mappings.check_first_record();
+        self.mappings.push_stack(Branch::with_fields(fields));
+        self.mappings.check_substitute(first_record)?;
         visitor.visit_map(self)
     }
 
@@ -752,7 +781,6 @@ impl<'de> MapAccess<'de> for Deserializer<'de> {
     where
         K: DeserializeSeed<'de>,
     {
-        self.mappings.check_start();
         if self.mappings.check_indent()? || self.mappings.check_cleanup() {
             seed.deserialize(&mut *self).map(Some)
         } else {
@@ -885,26 +913,18 @@ mod test {
 
     #[test]
     fn nesting() -> Result<(), Box<Error>> {
-        let d = "struct_e:\n  struct_f:\n    int: 987_654_321\n  flag: false\n";
-        let expected = D {
-            struct_e: {
-                E {
-                    struct_f: F { int: 987654321 },
-                    flag: false,
-                }
-            },
-        };
-        assert_eq!(expected, from_str(d)?);
-        let d = "struct_e:\n  flag: true\n  struct_f:\n    int: -12_34_56\n";
-        let expected = D {
-            struct_e: {
-                E {
-                    struct_f: F { int: -123456 },
-                    flag: true,
-                }
-            },
-        };
-        assert_eq!(expected, from_str(d)?);
+        assert_eq!(
+            D { struct_e: { E { struct_f: F { int: 987654321 }, flag: false, } }, },
+            from_str("struct_e:\n  struct_f:\n    int: 987_654_321\n  flag: false\n")?
+        );
+        assert_eq!(
+            D { struct_e: { E { struct_f: F { int: -123456 }, flag: true, } }, },
+            from_str("struct_e:\n  flag: true\n  struct_f:\n    int: -12_34_56\n")?
+        );
+        match from_str::<E>("struct_f: 223344\n  int: 55\n") {
+            Err(Error::FailedParse(ParseError::InvalidSubstitute)) => (),
+            r => panic!("bad result {:?}", r),
+        }
         Ok(())
     }
 
@@ -923,7 +943,7 @@ mod test {
         assert_eq!(expected, from_str(g)?);
         match from_str::<G>("string: test\njunk: stuff\n") {
             Err(Error::FailedParse(ParseError::UnexpectedKey)) => (),
-            e => panic!("{:?}", e),
+            r => panic!("bad result {:?}", r),
         }
         Ok(())
     }
@@ -1037,25 +1057,51 @@ mod test {
     }
 
     #[test]
-    fn record_default() -> Result<(), Box<Error>> {
-        let j = "person: Immanuel Kant\n  score: 600\nperson: Arthur Schopenhauer\n  score: 225\nperson: René Descartes\n  score: 400\n";
-        let expected = J {
-            person: vec![
-                K {
-                    name: "Immanuel Kant".to_string(),
-                    score: 600,
-                },
-                K {
-                    name: "Arthur Schopenhauer".to_string(),
-                    score: 225,
-                },
-                K {
-                    name: "René Descartes".to_string(),
-                    score: 400,
-                },
-            ],
+    fn record_substitute() -> Result<(), Box<Error>> {
+        assert_eq!(
+            J {
+                person: vec![
+                    K {
+                        name: "Immanuel Kant".to_string(),
+                        score: 600,
+                    },
+                    K {
+                        name: "Arthur Schopenhauer".to_string(),
+                        score: 225,
+                    },
+                    K {
+                        name: "René Descartes".to_string(),
+                        score: 400,
+                    },
+                ],
+            },
+            from_str("person: Immanuel Kant\n  score: 600\nperson: Arthur Schopenhauer\n  score: 225\nperson: René Descartes\n  score: 400\n")?
+        );
+        Ok(())
+    }
+
+    #[derive(Deserialize, PartialEq, Debug)]
+    struct N {
+        name: Option<String>,
+        id: u32,
+    }
+    #[derive(Deserialize, PartialEq, Debug)]
+    struct O {
+        thing: Vec<N>,
+    }
+    #[test]
+    fn record_optional() -> Result<(), Box<Error>> {
+        assert_eq!(
+            O { thing: vec![
+                N { name: Some("X".to_string()), id: 1 },
+                N { name: None, id: 2 },
+            ] },
+            from_str("thing:\n  name: X\n  id: 1\nthing:\n  id: 2\n")?
+        );
+        match from_str::<O>("thing: X\n  id: 1\nthing:\n  id: 2\n") {
+            Err(Error::FailedParse(ParseError::InvalidSubstitute)) => (),
+            r => panic!("bad result {:?}", r),
         };
-        assert_eq!(expected, from_str(j)?);
         Ok(())
     }
 }
