@@ -217,6 +217,7 @@ impl<'a> DefIter<'a> {
     }
 
     /// Get schema
+    #[allow(dead_code)]
     pub fn schema(&self) -> Option<&Schema> {
         match &self.schema {
             Some(schema) => Some(schema),

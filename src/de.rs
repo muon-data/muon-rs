@@ -317,8 +317,7 @@ impl<'de> Deserializer<'de> {
 ///
 /// # Example
 /// ```
-/// use serde_derive::Deserialize;
-///
+/// # use serde_derive::Deserialize;
 /// #[derive(Debug, Deserialize)]
 /// struct Person {
 ///     name: String,
@@ -351,8 +350,7 @@ where
 ///
 /// # Example
 /// ```
-/// use serde_derive::Deserialize;
-///
+/// # use serde_derive::Deserialize;
 /// #[derive(Debug, Deserialize)]
 /// struct Person {
 ///     name: String,
@@ -387,7 +385,36 @@ where
 ///
 /// [`std::io::BufReader`]: https://doc.rust-lang.org/std/io/struct.BufReader.html
 ///
-/// FIXME: add example
+/// # Example
+/// ```
+/// # use serde_derive::Deserialize;
+/// # use std::fs::File;
+/// #[derive(Debug, Deserialize)]
+/// struct BookList {
+///     book: Vec<Book>,
+/// }
+///
+/// #[derive(Debug, Deserialize)]
+/// struct Book {
+///     title: String,
+///     author: String,
+///     year: Option<i16>,
+///     character: Vec<Character>,
+/// }
+///
+/// #[derive(Debug, Deserialize)]
+/// struct Character {
+///     name: String,
+///     location: Option<String>,
+/// }
+///
+/// # fn main() -> Result<(), muon_rs::Error> {
+/// let muon = File::open("tests/books.muon")?;
+/// let books: BookList = muon_rs::from_reader(muon)?;
+/// println!("{:?}", books);
+/// # Ok(())
+/// # }
+/// ```
 ///
 /// # Errors
 ///
@@ -641,11 +668,11 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: Visitor<'de>,
     {
         if let Some(branch) = self.mappings.stack.last() {
-            if branch.is_substitute() {
-                return Err(Error::FailedParse(ParseError::InvalidSubstitute));
-            }
             if let BranchState::Cleanup = branch.state {
                 return visitor.visit_none();
+            }
+            if branch.is_substitute() {
+                return Err(Error::FailedParse(ParseError::InvalidSubstitute));
             }
         }
         visitor.visit_some(self)

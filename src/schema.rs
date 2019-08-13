@@ -7,7 +7,9 @@ use crate::datetime::{Date, DateTime, Time};
 use crate::error::ParseError;
 use std::str::FromStr;
 
-/// Representation of any valid MuON value
+/// A MuON value
+///
+/// Warning: this type is not fully implemented.
 #[derive(Debug)]
 #[allow(dead_code)]
 pub enum Value {
@@ -23,8 +25,9 @@ pub enum Value {
     Date(Date),
     /// Time with no date or offset
     Time(Time),
-//    Record(Map<Value, Value>),
-//    Dict(Map<String, Value>),
+//    Record(Map<String, Value>),
+//    Dict(Map<Value, Value>),
+//    Any(Map<String, Value>),
     /// Optional value
     Optional(Option<Box<Value>>),
     /// List of values
