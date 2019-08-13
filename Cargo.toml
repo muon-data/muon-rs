@@ -1,6 +1,6 @@
 [package]
 name = "muon-rs"
-version = "0.1.2"
+version = "0.2.0"
 authors = ["Doug Lau <doug.p.lau@gmail.com>"]
 description = "Serde support for MuON data interchange format"
 license = "MIT OR Apache-2.0"
