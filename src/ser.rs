@@ -144,6 +144,14 @@ impl<W: Write> Serializer<W> {
         }
     }
 
+    /// Set key to be optional
+    fn set_optional_key(&mut self) {
+        if let Some(branch) = self.stack.last_mut() {
+            // Set n_keys to 2 so is_first_key returns false
+            branch.n_keys = 2;
+        }
+    }
+
     /// Set the key to blank (for repeated keys)
     fn set_key_blank(&mut self) {
         if let Some(branch) = self.stack.last_mut() {
@@ -448,6 +456,7 @@ impl<'a, W: Write> ser::Serializer for &'a mut Serializer<W> {
     where
         V: ?Sized + Serialize,
     {
+        self.set_optional_key();
         value.serialize(self)
     }
 
@@ -951,7 +960,7 @@ string_c:=first item
                     G { option_a: None, option_b: None },
                 ],
             })?,
-            "list_g:\nlist_g:\n  option_b: 55\nlist_g: true\nlist_g: false\n  option_b: 99\nlist_g:\n"
+            "list_g:\nlist_g:\n  option_b: 55\nlist_g:\n  option_a: true\nlist_g:\n  option_a: false\n  option_b: 99\nlist_g:\n"
         );
         Ok(())
     }
@@ -992,7 +1001,7 @@ string_c:=first item
                     },
                 ],
             })?,
-            "list_j: 99\n  option_b: test\nlist_j:\n  option_b: abc\nlist_j: 77\n  option_b: xyz\nlist_j:\n"
+            "list_j:\n  option_a: 99\n  option_b: test\nlist_j:\n  option_b: abc\nlist_j:\n  option_a: 77\n  option_b: xyz\nlist_j:\n"
         );
         Ok(())
     }
