@@ -119,11 +119,13 @@ MuON types can be mapped to different Rust types.
        <a href="https://doc.rust-lang.org/std/primitive.i32.html">i32</a>
        <a href="https://doc.rust-lang.org/std/primitive.i64.html">i64</a>
        <a href="https://doc.rust-lang.org/std/primitive.i128.html">i128</a>
-       <a href="https://doc.rust-lang.org/std/primitive.u8.html">u8</a>
+       <a href="https://doc.rust-lang.org/std/primitive.isize.html">isize</a>
+       <a href="https://doc.rust-lang.org/std/primitive.u8.html">u8</a>
        <a href="https://doc.rust-lang.org/std/primitive.u16.html">u16</a>
        <a href="https://doc.rust-lang.org/std/primitive.u32.html">u32</a>
        <a href="https://doc.rust-lang.org/std/primitive.u64.html">u64</a>
        <a href="https://doc.rust-lang.org/std/primitive.u128.html">u128</a>
+       <a href="https://doc.rust-lang.org/std/primitive.usize.html">usize</a>
     </td>
   </tr>
   <tr>
