@@ -40,10 +40,18 @@ impl Separator {
 
 impl<'a> Define<'a> {
     /// Create a new definition
-    pub fn new(indent: usize, key: &'a str, separator: Separator,
-        value: &'a str) -> Self
-    {
-        Define { indent, key, separator, value }
+    pub fn new(
+        indent: usize,
+        key: &'a str,
+        separator: Separator,
+        value: &'a str,
+    ) -> Self {
+        Define {
+            indent,
+            key,
+            separator,
+            value,
+        }
     }
 
     /// Split a definition for a list

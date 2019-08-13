@@ -216,12 +216,16 @@ impl<'a> MappingIter<'a> {
                     if define.value.len() > 0 && indent > 0 {
                         if first_record {
                             return Err(Error::FailedParse(
-                                ParseError::InvalidSubstitute
+                                ParseError::InvalidSubstitute,
                             ));
                         }
                         branch.substitute = Some(key);
-                        self.define = Some(Define::new(indent - 1, key,
-                            define.separator, define.value))
+                        self.define = Some(Define::new(
+                            indent - 1,
+                            key,
+                            define.separator,
+                            define.value,
+                        ))
                     }
                 }
             }
@@ -440,16 +444,16 @@ where
 
 impl<'de> Deserializer<'de> {
     /// Parse a define into a result
-    fn define_result(&self, define: Option<Define<'de>>) -> Result<Define<'de>>
-    {
+    fn define_result(
+        &self,
+        define: Option<Define<'de>>,
+    ) -> Result<Define<'de>> {
         match define {
             Some(define) => Ok(define),
-            None => {
-                match self.mappings.defs.error() {
-                    Some(e) => Err(Error::FailedParse(e)),
-                    None => Err(Error::FailedParse(ParseError::ExpectedMore)),
-                }
-            }
+            None => match self.mappings.defs.error() {
+                Some(e) => Err(Error::FailedParse(e)),
+                None => Err(Error::FailedParse(ParseError::ExpectedMore)),
+            },
         }
     }
 
@@ -826,8 +830,8 @@ impl<'de> MapAccess<'de> for Deserializer<'de> {
 
 #[cfg(test)]
 mod test {
-    use super::{from_str, Error, ParseError};
     use super::super::datetime::*;
+    use super::{from_str, Error, ParseError};
     use serde_derive::Deserialize;
 
     #[derive(Deserialize, PartialEq, Debug)]
@@ -941,12 +945,30 @@ mod test {
     #[test]
     fn nesting() -> Result<(), Box<Error>> {
         assert_eq!(
-            D { struct_e: { E { struct_f: F { int: 987654321 }, flag: false, } }, },
-            from_str("struct_e:\n  struct_f:\n    int: 987_654_321\n  flag: false\n")?
+            D {
+                struct_e: {
+                    E {
+                        struct_f: F { int: 987654321 },
+                        flag: false,
+                    }
+                },
+            },
+            from_str(
+                "struct_e:\n  struct_f:\n    int: 987_654_321\n  flag: false\n"
+            )?
         );
         assert_eq!(
-            D { struct_e: { E { struct_f: F { int: -123456 }, flag: true, } }, },
-            from_str("struct_e:\n  flag: true\n  struct_f:\n    int: -12_34_56\n")?
+            D {
+                struct_e: {
+                    E {
+                        struct_f: F { int: -123456 },
+                        flag: true,
+                    }
+                },
+            },
+            from_str(
+                "struct_e:\n  flag: true\n  struct_f:\n    int: -12_34_56\n"
+            )?
         );
         match from_str::<E>("struct_f: 223344\n  int: 55\n") {
             Err(Error::FailedParse(ParseError::InvalidSubstitute)) => (),
@@ -983,16 +1005,19 @@ mod test {
     #[test]
     fn text_list() -> Result<(), Box<Error>> {
         let h = "strings: first second third\n       :>item\n       : fourth\n       :=fifth item\n       : sixth\n";
-        assert_eq!(H {
-            strings: vec![
-                "first".to_string(),
-                "second".to_string(),
-                "third\nitem".to_string(),
-                "fourth".to_string(),
-                "fifth item".to_string(),
-                "sixth".to_string(),
-            ],
-        }, from_str::<H>(h)?);
+        assert_eq!(
+            H {
+                strings: vec![
+                    "first".to_string(),
+                    "second".to_string(),
+                    "third\nitem".to_string(),
+                    "fourth".to_string(),
+                    "fifth item".to_string(),
+                    "sixth".to_string(),
+                ],
+            },
+            from_str::<H>(h)?
+        );
         Ok(())
     }
 
@@ -1074,7 +1099,8 @@ mod test {
     fn datetime() -> Result<(), Box<Error>> {
         let date = "2019-08-07".parse().map_err(|e| Error::FailedParse(e))?;
         let time = "12:34:56.789".parse().map_err(|e| Error::FailedParse(e))?;
-        let datetime = "1999-12-31T23:59:59.999-00:00".parse()
+        let datetime = "1999-12-31T23:59:59.999-00:00"
+            .parse()
             .map_err(|e| Error::FailedParse(e))?;
         assert_eq!(
             M { name: "one day".to_string(), date, time, datetime },
@@ -1119,10 +1145,15 @@ mod test {
     #[test]
     fn record_optional() -> Result<(), Box<Error>> {
         assert_eq!(
-            O { thing: vec![
-                N { name: Some("X".to_string()), id: 1 },
-                N { name: None, id: 2 },
-            ] },
+            O {
+                thing: vec![
+                    N {
+                        name: Some("X".to_string()),
+                        id: 1
+                    },
+                    N { name: None, id: 2 },
+                ]
+            },
             from_str("thing:\n  name: X\n  id: 1\nthing:\n  id: 2\n")?
         );
         match from_str::<O>("thing: X\n  id: 1\nthing:\n  id: 2\n") {

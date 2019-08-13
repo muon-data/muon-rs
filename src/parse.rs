@@ -47,9 +47,7 @@ fn int_fallback<T: Integer>(v: &str) -> Option<T> {
 
 /// Parse a number from a string slice
 pub fn number<T: Number>(v: &str) -> Option<T> {
-    v.parse()
-        .ok()
-        .or_else(|| sanitize_num(v, 10).parse().ok())
+    v.parse().ok().or_else(|| sanitize_num(v, 10).parse().ok())
 }
 
 /// Sanitize a number, removing valid underscores

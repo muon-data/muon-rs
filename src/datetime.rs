@@ -88,9 +88,9 @@ enum _TimeOffset {
 fn days_in_month(year: u16, month: u8) -> Option<u8> {
     match month {
         // April, June, Septemper, November
-        4|6|9|11 => Some(30),
+        4 | 6 | 9 | 11 => Some(30),
         // January, March, May, July, August, October, December
-        1|3|5|7|8|10|12 => Some(31),
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => Some(31),
         // February
         2 => Some(if is_leap_year(year) { 29 } else { 28 }),
         // Not a real month
@@ -100,29 +100,33 @@ fn days_in_month(year: u16, month: u8) -> Option<u8> {
 
 /// Check if a year is a leap year
 fn is_leap_year(year: u16) -> bool {
-    year % 4 == 0 &&
-    (year % 100 != 0 || year % 400 == 0)
+    year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
 }
 
 /// Convert ASCII digit to a number
 fn digit(b: u8) -> Option<u8> {
-   if b >= b'0' && b <= b'9' {
-       Some(b - b'0')
-   } else {
-       None
-   }
+    if b >= b'0' && b <= b'9' {
+        Some(b - b'0')
+    } else {
+        None
+    }
 }
 
 /// Parse a 4-digit ASCII decimal number
 fn parse_4_digits(ascii: &[u8]) -> Option<u16> {
     if ascii.len() == 4 {
-        if let (Some(b0), Some(b1), Some(b2), Some(b3)) = (digit(ascii[0]),
-            digit(ascii[1]), digit(ascii[2]), digit(ascii[3]))
-        {
-            return Some(u16::from(b0) * 1000 +
-                        u16::from(b1) * 100 +
-                        u16::from(b2) * 10 +
-                        u16::from(b3))
+        if let (Some(b0), Some(b1), Some(b2), Some(b3)) = (
+            digit(ascii[0]),
+            digit(ascii[1]),
+            digit(ascii[2]),
+            digit(ascii[3]),
+        ) {
+            return Some(
+                u16::from(b0) * 1000
+                    + u16::from(b1) * 100
+                    + u16::from(b2) * 10
+                    + u16::from(b3),
+            );
         }
     }
     None
@@ -140,7 +144,7 @@ fn parse_year(year: &[u8]) -> Option<u16> {
 fn parse_2_digits(ascii: &[u8]) -> Option<u8> {
     if ascii.len() == 2 {
         if let (Some(b0), Some(b1)) = (digit(ascii[0]), digit(ascii[1])) {
-            return Some(b0 * 10 + b1)
+            return Some(b0 * 10 + b1);
         }
     }
     None
@@ -199,7 +203,7 @@ fn parse_nanosecond(nano: &[u8]) -> Option<u32> {
                     if i < 9 {
                         ns += u32::from(b) * 10_u32.pow(8 - i as u32);
                     }
-                },
+                }
                 None => return None,
             }
         }
@@ -249,11 +253,16 @@ impl<'de> de::Deserialize<'de> for DateTime {
                 write!(formatter, "DateTime")
             }
 
-            fn visit_str<E: de::Error>(self, s: &str) -> Result<Self::Value, E>{
+            fn visit_str<E: de::Error>(
+                self,
+                s: &str,
+            ) -> Result<Self::Value, E> {
                 match s.parse() {
                     Ok(datetime) => Ok(datetime),
                     Err(_) => Err(de::Error::invalid_value(
-                        de::Unexpected::Str(&s), &self)),
+                        de::Unexpected::Str(&s),
+                        &self,
+                    )),
                 }
             }
         }
@@ -273,7 +282,11 @@ impl DateTime {
                 let date = Date::new(&bytes[..10])?;
                 let time = Time::new(&bytes[11..offset], false)?;
                 let time_offset = TimeOffset::new(&bytes[offset..])?;
-                return Ok(DateTime { date, time, time_offset });
+                return Ok(DateTime {
+                    date,
+                    time,
+                    time_offset,
+                });
             }
         }
         Err(ParseError::ExpectedDateTime)
@@ -329,11 +342,16 @@ impl<'de> de::Deserialize<'de> for Date {
                 write!(formatter, "Date")
             }
 
-            fn visit_str<E: de::Error>(self, s: &str) -> Result<Self::Value, E>{
+            fn visit_str<E: de::Error>(
+                self,
+                s: &str,
+            ) -> Result<Self::Value, E> {
                 match s.parse() {
                     Ok(date) => Ok(date),
                     Err(_) => Err(de::Error::invalid_value(
-                        de::Unexpected::Str(&s), &self)),
+                        de::Unexpected::Str(&s),
+                        &self,
+                    )),
                 }
             }
         }
@@ -416,11 +434,16 @@ impl<'de> de::Deserialize<'de> for Time {
                 write!(formatter, "Time")
             }
 
-            fn visit_str<E: de::Error>(self, s: &str) -> Result<Self::Value, E>{
+            fn visit_str<E: de::Error>(
+                self,
+                s: &str,
+            ) -> Result<Self::Value, E> {
                 match s.parse::<Time>() {
                     Ok(time) => Ok(time),
                     Err(_) => Err(de::Error::invalid_value(
-                        de::Unexpected::Str(&s), &self)),
+                        de::Unexpected::Str(&s),
+                        &self,
+                    )),
                 }
             }
         }
@@ -435,8 +458,14 @@ impl Time {
             if let Some(hour) = parse_hour(&bytes[..2]) {
                 if let Some(minute) = parse_minute(&bytes[3..5]) {
                     if let Some(second) = parse_second(&bytes[6..8], leap_sec) {
-                        if let Some(nanosecond) = parse_nanosecond(&bytes[8..]) {
-                            return Ok(Time { hour, minute, second, nanosecond });
+                        if let Some(nanosecond) = parse_nanosecond(&bytes[8..])
+                        {
+                            return Ok(Time {
+                                hour,
+                                minute,
+                                second,
+                                nanosecond,
+                            });
                         }
                     }
                 }
@@ -485,8 +514,9 @@ impl TimeOffset {
     fn new(bytes: &[u8]) -> Result<Self, ParseError> {
         if bytes.len() == 1 && bytes[0] == b'Z' {
             return Ok(TimeOffset(_TimeOffset::Z));
-        } else if bytes.len() == 6 && bytes[3] == b':' &&
-            (bytes[0] == b'+' || bytes[0] == b'-')
+        } else if bytes.len() == 6
+            && bytes[3] == b':'
+            && (bytes[0] == b'+' || bytes[0] == b'-')
         {
             if let Some(h) = parse_hour(&bytes[1..3]) {
                 if let Some(m) = parse_minute(&bytes[4..6]) {
@@ -505,7 +535,7 @@ impl TimeOffset {
         const MAX: usize = std::usize::MAX;
         let len = bytes.len();
         match len {
-            1...MAX if bytes[len-1] == b'Z' => len - 1,
+            1...MAX if bytes[len - 1] == b'Z' => len - 1,
             6...MAX => len - 6,
             _ => 0,
         }
@@ -531,24 +561,66 @@ mod test {
 
     #[test]
     fn date_time_ok() -> Result<(), Box<ParseError>> {
-        assert_eq!(2011, "2011-01-01T12:30:15Z"
-            .parse::<DateTime>()?.date().year());
-        assert_eq!(4, "2002-04-02T04:57:19.001+00:00"
-            .parse::<DateTime>()?.date().month());
-        assert_eq!(15, "1975-03-15T19:23:00+07:00"
-            .parse::<DateTime>()?.date().day());
-        assert_eq!(22, "2009-10-03T22:03:19-05:00"
-            .parse::<DateTime>()?.time().hour());
-        assert_eq!(59, "2025-09-29T14:59:13.392853953+10:45"
-            .parse::<DateTime>()?.time().minute());
-        assert_eq!(48, "2015-05-27T18:31:48.123-06:00"
-            .parse::<DateTime>()?.time().second());
-        assert_eq!(987_654_321, "2003-08-22T01:55:11.987654321+02:30"
-            .parse::<DateTime>()?.time().nanosecond());
-        assert_eq!(0, "2007-01-11T05:45:12+04:00"
-            .parse::<DateTime>()?.time().nanosecond());
-        assert_eq!(-21600, "2012-06-21T19:03:00.0-06:00"
-            .parse::<DateTime>()?.time_offset().seconds());
+        assert_eq!(
+            2011,
+            "2011-01-01T12:30:15Z".parse::<DateTime>()?.date().year()
+        );
+        assert_eq!(
+            4,
+            "2002-04-02T04:57:19.001+00:00"
+                .parse::<DateTime>()?
+                .date()
+                .month()
+        );
+        assert_eq!(
+            15,
+            "1975-03-15T19:23:00+07:00"
+                .parse::<DateTime>()?
+                .date()
+                .day()
+        );
+        assert_eq!(
+            22,
+            "2009-10-03T22:03:19-05:00"
+                .parse::<DateTime>()?
+                .time()
+                .hour()
+        );
+        assert_eq!(
+            59,
+            "2025-09-29T14:59:13.392853953+10:45"
+                .parse::<DateTime>()?
+                .time()
+                .minute()
+        );
+        assert_eq!(
+            48,
+            "2015-05-27T18:31:48.123-06:00"
+                .parse::<DateTime>()?
+                .time()
+                .second()
+        );
+        assert_eq!(
+            987_654_321,
+            "2003-08-22T01:55:11.987654321+02:30"
+                .parse::<DateTime>()?
+                .time()
+                .nanosecond()
+        );
+        assert_eq!(
+            0,
+            "2007-01-11T05:45:12+04:00"
+                .parse::<DateTime>()?
+                .time()
+                .nanosecond()
+        );
+        assert_eq!(
+            -21600,
+            "2012-06-21T19:03:00.0-06:00"
+                .parse::<DateTime>()?
+                .time_offset()
+                .seconds()
+        );
         Ok(())
     }
 

@@ -17,17 +17,17 @@ pub enum Value {
     Text(String),
     /// Boolean value
     Bool(bool),
-//    Int(Integer),
-//    Number(Number),
+    // Int(Integer),
+    // Number(Number),
     /// Date and time with offset
     DateTime(DateTime),
     /// Date with no time or offset
     Date(Date),
     /// Time with no date or offset
     Time(Time),
-//    Record(Map<String, Value>),
-//    Dict(Map<Value, Value>),
-//    Any(Map<String, Value>),
+    // Record(Map<String, Value>),
+    // Dict(Map<Value, Value>),
+    // Any(Map<String, Value>),
     /// Optional value
     Optional(Option<Box<Value>>),
     /// List of values
@@ -141,7 +141,13 @@ impl<'a> Node<'a> {
             let node_type = v[0].parse()?;
             // FIXME: parse default value
             let default = None;
-            Ok(Node { indent, name, modifier, node_type, default })
+            Ok(Node {
+                indent,
+                name,
+                modifier,
+                node_type,
+                default,
+            })
         } else {
             Err(ParseError::InvalidType)
         }
@@ -152,13 +158,13 @@ impl<'a> Node<'a> {
         match prev {
             None => self.indent == 0,
             Some(prev) => {
-                self.indent <= prev.indent ||
-                match prev.node_type {
-                    Type::Record | Type::Dictionary | Type::Any => {
-                        self.indent == prev.indent + 1
+                self.indent <= prev.indent
+                    || match prev.node_type {
+                        Type::Record | Type::Dictionary | Type::Any => {
+                            self.indent == prev.indent + 1
+                        }
+                        _ => false,
                     }
-                    _ => false,
-                }
             }
         }
     }

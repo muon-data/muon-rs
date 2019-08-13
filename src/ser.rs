@@ -105,7 +105,7 @@ impl<W: Write> Serializer<W> {
             key: None,
             n_keys: 0,
             list: false,
-            visited: false
+            visited: false,
         });
     }
 
@@ -377,7 +377,7 @@ fn is_colon_homoglyph(c: char) -> bool {
     c == '\u{FE13}' || // ︓Presentation Form For Vertical Colon
     c == '\u{FE55}' || // ﹕Small Colon
     c == '\u{FF1A}' || // ：Fullwidth Colon
-    c == '\u{E003A}'  // 󠀺 Tag Colon
+    c == '\u{E003A}' // 󠀺 Tag Colon
 }
 
 impl<'a, W: Write> ser::Serializer for &'a mut Serializer<W> {
@@ -729,8 +729,8 @@ where
 
 #[cfg(test)]
 mod test {
-    use super::{to_string, Error};
     use super::super::datetime::*;
+    use super::{to_string, Error};
     use serde_derive::Serialize;
     use std::collections::HashMap;
 
@@ -1042,7 +1042,8 @@ string_c:=first item
     fn date() -> Result<(), Box<Error>> {
         let date = "2019-08-07".parse().map_err(|e| Error::FailedParse(e))?;
         let time = "12:34:56.789".parse().map_err(|e| Error::FailedParse(e))?;
-        let datetime = "1999-12-31T23:59:59.999-00:00".parse()
+        let datetime = "1999-12-31T23:59:59.999-00:00"
+            .parse()
             .map_err(|e| Error::FailedParse(e))?;
         assert_eq!(
             to_string(&N { name: "one day".to_string(), date, time, datetime })?,

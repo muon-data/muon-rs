@@ -213,7 +213,13 @@ impl<'a> DefIter<'a> {
         let schema = None;
         let define = None;
         let error = None;
-        DefIter { lines, indent_spaces, schema, define, error }
+        DefIter {
+            lines,
+            indent_spaces,
+            schema,
+            define,
+            error,
+        }
     }
 
     /// Get schema
@@ -278,15 +284,22 @@ impl<'a> DefIter<'a> {
     }
 
     /// Make a definition from key and value
-    fn make_define(&self, key: &'a str, separator: Separator, value: &'a str)
-        -> Result<Define<'a>, ParseError>
-    {
+    fn make_define(
+        &self,
+        key: &'a str,
+        separator: Separator,
+        value: &'a str,
+    ) -> Result<Define<'a>, ParseError> {
         // is key blank? (all spaces)
         if key.chars().all(|c| c == ' ') {
             if key.len() == self.key_len() {
                 if let Some(define) = self.define {
-                    return Ok(Define::new(define.indent, define.key, separator,
-                        value));
+                    return Ok(Define::new(
+                        define.indent,
+                        define.key,
+                        separator,
+                        value,
+                    ));
                 }
             }
         } else if let Some(indent) = self.indent_count(key) {
@@ -301,9 +314,12 @@ impl<'a> DefIter<'a> {
     }
 
     /// Process a define
-    fn process_define(&mut self, key: &'a str, separator: Separator,
-        value: &'a str) -> Result<Option<Define<'a>>, ParseError>
-    {
+    fn process_define(
+        &mut self,
+        key: &'a str,
+        separator: Separator,
+        value: &'a str,
+    ) -> Result<Option<Define<'a>>, ParseError> {
         self.set_indent_spaces(key)?;
         let def = self.make_define(key, separator, value)?;
         if let (None, Some(schema)) = (&self.define, &mut self.schema) {
@@ -333,9 +349,10 @@ impl<'a> DefIter<'a> {
     }
 
     /// Process a line
-    fn process_line(&mut self, ln: Line<'a>) -> Result<Option<Define<'a>>,
-        ParseError>
-    {
+    fn process_line(
+        &mut self,
+        ln: Line<'a>,
+    ) -> Result<Option<Define<'a>>, ParseError> {
         match ln {
             Line::SchemaSeparator => self.process_schema(),
             Line::Blank | Line::Comment(_) => Ok(None),
@@ -381,12 +398,18 @@ mod test {
         assert_eq!(li.next().unwrap(), Line::Comment("# Comment"));
         assert_eq!(li.next().unwrap(), Line::SchemaSeparator);
         assert_eq!(li.next().unwrap(), Line::Blank);
-        assert_eq!(li.next().unwrap(),
-            Line::Definition("a", Separator::Normal, "value a"));
-        assert_eq!(li.next().unwrap(),
-            Line::Definition("b", Separator::TextValue, "value b"));
-        assert_eq!(li.next().unwrap(),
-            Line::Definition("c", Separator::TextAppend, "value c"));
+        assert_eq!(
+            li.next().unwrap(),
+            Line::Definition("a", Separator::Normal, "value a")
+        );
+        assert_eq!(
+            li.next().unwrap(),
+            Line::Definition("b", Separator::TextValue, "value b")
+        );
+        assert_eq!(
+            li.next().unwrap(),
+            Line::Definition("c", Separator::TextAppend, "value c")
+        );
     }
 
     #[test]
