@@ -136,15 +136,15 @@ MuON types can be mapped to different Rust types.
   </tr>
   <tr>
     <td>datetime</td>
-    <td><a href="https://docs.rs/muon_rs/latest/muon-rs/struct.DateTime.html">DateTime</a></td>
+    <td><a href="https://docs.rs/muon-rs/latest/muon_rs/struct.DateTime.html">DateTime</a></td>
   </tr>
   <tr>
     <td>date</td>
-    <td><a href="https://docs.rs/muon_rs/latest/muon-rs/struct.Date.html">Date</a></td>
+    <td><a href="https://docs.rs/muon-rs/latest/muon_rs/struct.Date.html">Date</a></td>
   </tr>
   <tr>
     <td>time</td>
-    <td><a href="https://docs.rs/muon_rs/latest/muon-rs/struct.Time.html">Time</a></td>
+    <td><a href="https://docs.rs/muon-rs/latest/muon_rs/struct.Time.html">Time</a></td>
   </tr>
   <tr>
     <td>record</td>
@@ -161,7 +161,7 @@ MuON types can be mapped to different Rust types.
   </tr>
   <tr>
     <td>any</td>
-    <td><a href="https://docs.rs/muon_rs/latest/muon-rs/enum.Value.html">Value</a></td>
+    <td><a href="https://docs.rs/muon-rs/latest/muon_rs/enum.Value.html">Value</a></td>
   </tr>
 </table>
 
