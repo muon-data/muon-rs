@@ -1162,4 +1162,25 @@ mod test {
         };
         Ok(())
     }
+
+    #[derive(Debug, Deserialize, PartialEq)]
+    struct R {
+        name: F,
+        other: u32,
+    }
+    #[test]
+    fn substitute_record() -> Result<(), Box<Error>> {
+        assert_eq!(
+            R {
+                name: F { int: 999 },
+                other: 15,
+            },
+            from_str("name:\n  int: 999\nother: 15\n")?
+        );
+        match from_str::<R>("name: 999\nother: 15\n") {
+            Err(Error::FailedParse(ParseError::InvalidSubstitute)) => (),
+            r => panic!("bad result {:?}", r),
+        };
+        Ok(())
+    }
 }
