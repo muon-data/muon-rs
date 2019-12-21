@@ -535,8 +535,8 @@ impl TimeOffset {
         const MAX: usize = std::usize::MAX;
         let len = bytes.len();
         match len {
-            1...MAX if bytes[len - 1] == b'Z' => len - 1,
-            6...MAX => len - 6,
+            1..=MAX if bytes[len - 1] == b'Z' => len - 1,
+            6..=MAX => len - 6,
             _ => 0,
         }
     }
