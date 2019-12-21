@@ -52,15 +52,26 @@ enum LinePos {
     AfterValue,
 }
 
+/// Type modifier
+#[derive(Debug, PartialEq)]
+enum Modifier {
+    /// No modifier (default)
+    No,
+    /// Optional value
+    Optional,
+    /// List of values
+    List,
+}
+
 /// Branch for stack
 #[derive(Debug)]
 struct Branch {
-    /// Current key (one field in branch)
+    /// Current field key
     key: Option<String>,
-    /// Number of keys
-    n_keys: u32,
-    /// List flag (applies to current key)
-    list: bool,
+    /// Current field number
+    n_field: u32,
+    /// Current field modifier
+    modifier: Modifier,
     /// Fields visited flag
     visited: bool,
 }
@@ -103,8 +114,8 @@ impl<W: Write> Serializer<W> {
     fn push_stack(&mut self) {
         self.stack.push(Branch {
             key: None,
-            n_keys: 0,
-            list: false,
+            n_field: 0,
+            modifier: Modifier::No,
             visited: false,
         });
     }
@@ -121,17 +132,17 @@ impl<W: Write> Serializer<W> {
         Ok(())
     }
 
-    /// Set the top of stack to a list
-    fn set_list(&mut self, list: bool) {
+    /// Set modifier for the top branch of stack
+    fn set_modifier(&mut self, modifier: Modifier) {
         if let Some(branch) = self.stack.last_mut() {
-            branch.list = list
+            branch.modifier = modifier;
         }
     }
 
     /// Check if the current define is a list
     fn is_list(&self) -> bool {
         match self.stack.last() {
-            Some(branch) => branch.list,
+            Some(branch) => branch.modifier == Modifier::List,
             _ => false,
         }
     }
@@ -140,15 +151,7 @@ impl<W: Write> Serializer<W> {
     fn set_key(&mut self, key: &str) {
         if let Some(branch) = self.stack.last_mut() {
             branch.key = Some(quoted_key(key));
-            branch.n_keys += 1;
-        }
-    }
-
-    /// Set key to be optional
-    fn set_optional_key(&mut self) {
-        if let Some(branch) = self.stack.last_mut() {
-            // Set n_keys to 2 so is_first_key returns false
-            branch.n_keys = 2;
+            branch.n_field += 1;
         }
     }
 
@@ -226,7 +229,7 @@ impl<W: Write> Serializer<W> {
             self.write_key(n)?;
             match n1 - n {
                 1 => (),
-                2 if self.is_first_key() => {
+                2 if self.is_substitute_allowed(n) => {
                     self.visit_branch(n + 1);
                     break;
                 }
@@ -238,12 +241,17 @@ impl<W: Write> Serializer<W> {
         Ok(write!(self.writer, "{}", self.separator.as_str())?)
     }
 
-    /// Check if the current key is the first within the branch
-    fn is_first_key(&self) -> bool {
-        match self.stack.last() {
-            Some(branch) => branch.n_keys == 1,
-            _ => false,
+    /// Check if substitute allowed for current field
+    fn is_substitute_allowed(&self, n: usize) -> bool {
+        let mut allowed = true;
+        if let Some(branch) = self.stack.iter().nth(n) {
+            allowed = branch.modifier != Modifier::Optional;
         }
+        if let Some(branch) = self.stack.last() {
+            allowed &= (branch.modifier != Modifier::Optional) &&
+                (branch.n_field == 1);
+        }
+        allowed
     }
 
     /// Mark a branch as visited (key has been written)
@@ -456,7 +464,7 @@ impl<'a, W: Write> ser::Serializer for &'a mut Serializer<W> {
     where
         V: ?Sized + Serialize,
     {
-        self.set_optional_key();
+        self.set_modifier(Modifier::Optional);
         value.serialize(self)
     }
 
@@ -503,7 +511,7 @@ impl<'a, W: Write> ser::Serializer for &'a mut Serializer<W> {
     }
 
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq> {
-        self.set_list(true);
+        self.set_modifier(Modifier::List);
         Ok(self)
     }
 
@@ -526,7 +534,7 @@ impl<'a, W: Write> ser::Serializer for &'a mut Serializer<W> {
         variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeTupleVariant> {
-        self.set_list(true);
+        self.set_modifier(Modifier::List);
         self.ser_key(variant)?;
         Ok(self)
     }
@@ -944,6 +952,24 @@ string_c:=first item
         );
         Ok(())
     }
+
+    #[derive(Serialize)]
+    struct Q {
+        name: Option<E>,
+        other: u32,
+    }
+    #[test]
+    fn substitute_optional() -> Result<(), Box<Error>> {
+        assert_eq!(
+            to_string(&Q {
+                name: Some(E { flag: true }),
+                other: 15,
+            })?,
+            "name:\n  flag: true\nother: 15\n"
+        );
+        Ok(())
+    }
+
     #[derive(Serialize)]
     struct H {
         list_g: Vec<G>,
