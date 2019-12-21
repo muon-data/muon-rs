@@ -248,8 +248,8 @@ impl<W: Write> Serializer<W> {
             allowed = branch.modifier != Modifier::Optional;
         }
         if let Some(branch) = self.stack.last() {
-            allowed &= (branch.modifier != Modifier::Optional) &&
-                (branch.n_field == 1);
+            allowed &= (branch.modifier != Modifier::Optional)
+                && (branch.n_field == 1);
         }
         allowed
     }
