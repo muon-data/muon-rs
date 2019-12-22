@@ -94,6 +94,14 @@ pub struct Serializer<W: Write> {
     separator: Separator,
 }
 
+impl Branch {
+    /// Check if substitute is allowed
+    fn is_substitute_allowed(&self) -> bool {
+        self.modifier != Modifier::Optional &&
+        self.n_field == 1
+    }
+}
+
 impl<W: Write> Serializer<W> {
     /// Create a new MuON Serializer
     fn new(n_indent: usize, writer: W) -> Self {
@@ -247,9 +255,8 @@ impl<W: Write> Serializer<W> {
         if let Some(branch) = self.stack.iter().nth(n) {
             allowed = branch.modifier != Modifier::Optional;
         }
-        if let Some(branch) = self.stack.last() {
-            allowed &= (branch.modifier != Modifier::Optional)
-                && (branch.n_field == 1);
+        if let Some(branch) = self.stack.iter().nth(n + 1) {
+            allowed &= branch.is_substitute_allowed()
         }
         allowed
     }
@@ -955,13 +962,30 @@ string_c:=first item
 
     #[derive(Serialize)]
     struct Q {
+        name: E,
+        other: u32,
+    }
+    #[test]
+    fn use_substitute() -> Result<(), Box<Error>> {
+        assert_eq!(
+            to_string(&Q {
+                name: E { flag: true },
+                other: 15,
+            })?,
+            "name: true\nother: 15\n"
+        );
+        Ok(())
+    }
+
+    #[derive(Serialize)]
+    struct R {
         name: Option<E>,
         other: u32,
     }
     #[test]
-    fn substitute_optional() -> Result<(), Box<Error>> {
+    fn no_substitute_option() -> Result<(), Box<Error>> {
         assert_eq!(
-            to_string(&Q {
+            to_string(&R {
                 name: Some(E { flag: true }),
                 other: 15,
             })?,
