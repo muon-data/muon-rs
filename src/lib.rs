@@ -37,7 +37,7 @@
 //!
 //! Rust code:
 //! ```rust
-//! # use serde_derive::{Deserialize, Serialize};
+//! # use serde::{Deserialize, Serialize};
 //! # use std::fs::File;
 //! #[derive(Debug, Deserialize, Serialize)]
 //! struct BookList {
@@ -76,7 +76,7 @@
 //! ### Example
 //!
 //! ```rust
-//! # use serde_derive::Serialize;
+//! # use serde::Serialize;
 //! # use std::fs::File;
 //! # #[derive(Debug, Serialize)]
 //! # struct BookList {

@@ -4,7 +4,7 @@
 //
 use crate::common::Separator;
 use crate::error::{Error, Result};
-use serde::ser::{self, Serialize};
+use serde::{ser, Serialize};
 use std::io::Write;
 
 /// Item which can be serialized to a writer
@@ -741,7 +741,7 @@ where
 mod test {
     use super::super::datetime::*;
     use super::{to_string, Error};
-    use serde_derive::Serialize;
+    use serde::Serialize;
     use std::collections::HashMap;
 
     #[derive(Serialize)]

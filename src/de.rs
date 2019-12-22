@@ -296,7 +296,7 @@ impl<'de> Deserializer<'de> {
 ///
 /// # Example
 /// ```
-/// # use serde_derive::Deserialize;
+/// # use serde::Deserialize;
 /// #[derive(Debug, Deserialize)]
 /// struct Person {
 ///     name: String,
@@ -329,7 +329,7 @@ where
 ///
 /// # Example
 /// ```
-/// # use serde_derive::Deserialize;
+/// # use serde::Deserialize;
 /// #[derive(Debug, Deserialize)]
 /// struct Person {
 ///     name: String,
@@ -366,7 +366,7 @@ where
 ///
 /// # Example
 /// ```
-/// # use serde_derive::Deserialize;
+/// # use serde::Deserialize;
 /// # use std::fs::File;
 /// #[derive(Debug, Deserialize)]
 /// struct BookList {
@@ -806,7 +806,7 @@ impl<'de> MapAccess<'de> for Deserializer<'de> {
 mod test {
     use super::super::datetime::*;
     use super::{from_str, Error, ParseError};
-    use serde_derive::Deserialize;
+    use serde::Deserialize;
 
     #[derive(Deserialize, PartialEq, Debug)]
     struct A {
