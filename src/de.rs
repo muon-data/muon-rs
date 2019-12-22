@@ -691,6 +691,11 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: Visitor<'de>,
     {
         self.mappings.set_list(true);
+        if let Some(branch) = self.mappings.stack.last() {
+            if branch.is_substitute() {
+                return Err(Error::FailedParse(ParseError::InvalidSubstitute));
+            }
+        }
         visitor.visit_seq(self)
     }
 
@@ -961,7 +966,7 @@ mod test {
         Ok(())
     }
 
-    #[derive(Deserialize, PartialEq, Debug)]
+    #[derive(Debug, Deserialize, PartialEq)]
     struct H {
         strings: Vec<String>,
     }
@@ -1161,6 +1166,19 @@ mod test {
             },
             from_str("group: group label\n")?,
         );
+        Ok(())
+    }
+
+    #[derive(Debug, Deserialize, PartialEq)]
+    struct U {
+        chan: Vec<H>,
+    }
+    #[test]
+    fn no_substitute_list() -> Result<(), Box<Error>> {
+        match from_str::<U>("chan: first second\n") {
+            Err(Error::FailedParse(ParseError::InvalidSubstitute)) => (),
+            r => panic!("bad result {:?}", r),
+        };
         Ok(())
     }
 }
