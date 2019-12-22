@@ -97,8 +97,7 @@ pub struct Serializer<W: Write> {
 impl Branch {
     /// Check if substitute is allowed
     fn is_substitute_allowed(&self) -> bool {
-        self.modifier != Modifier::Optional &&
-        self.n_field == 1
+        self.modifier == Modifier::No && self.n_field == 1
     }
 }
 
@@ -237,7 +236,7 @@ impl<W: Write> Serializer<W> {
             self.write_key(n)?;
             match n1 - n {
                 1 => (),
-                2 if self.is_substitute_allowed(n) => {
+                2 if self.is_substitute_allowed() => {
                     self.visit_branch(n + 1);
                     break;
                 }
@@ -250,15 +249,11 @@ impl<W: Write> Serializer<W> {
     }
 
     /// Check if substitute allowed for current field
-    fn is_substitute_allowed(&self, n: usize) -> bool {
-        let mut allowed = true;
-        if let Some(branch) = self.stack.iter().nth(n) {
-            allowed = branch.modifier != Modifier::Optional;
+    fn is_substitute_allowed(&self) -> bool {
+        match self.stack.last() {
+            Some(branch) => branch.is_substitute_allowed(),
+            _ => true,
         }
-        if let Some(branch) = self.stack.iter().nth(n + 1) {
-            allowed &= branch.is_substitute_allowed()
-        }
-        allowed
     }
 
     /// Mark a branch as visited (key has been written)
@@ -979,17 +974,45 @@ string_c:=first item
 
     #[derive(Serialize)]
     struct R {
-        name: Option<E>,
+        name: S,
         other: u32,
     }
     #[test]
     fn no_substitute_option() -> Result<(), Box<Error>> {
         assert_eq!(
             to_string(&R {
-                name: Some(E { flag: true }),
+                name: S { label: Some(String::from("A label")) },
                 other: 15,
             })?,
-            "name:\n  flag: true\nother: 15\n"
+            "name:\n  label: A label\nother: 15\n"
+        );
+        assert_eq!(
+            to_string(&R {
+                name: S { label: None },
+                other: 25,
+            })?,
+            "name:\nother: 25\n"
+        );
+        Ok(())
+    }
+
+    #[derive(Serialize)]
+    struct S {
+        label: Option<String>,
+    }
+    #[derive(Serialize)]
+    struct T {
+        name: String,
+        other: Option<S>,
+    }
+    #[test]
+    fn no_substitute_option2() -> Result<(), Box<Error>> {
+        assert_eq!(
+            to_string(&T {
+                name: String::from("Your Name"),
+                other: Some(S { label: Some(String::from("My Name")) } ),
+            })?,
+            "name: Your Name\nother:\n  label: My Name\n"
         );
         Ok(())
     }
