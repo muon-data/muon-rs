@@ -981,7 +981,9 @@ string_c:=first item
     fn no_substitute_option() -> Result<(), Box<Error>> {
         assert_eq!(
             to_string(&R {
-                name: S { label: Some(String::from("A label")) },
+                name: S {
+                    label: Some(String::from("A label"))
+                },
                 other: 15,
             })?,
             "name:\n  label: A label\nother: 15\n"
@@ -1010,7 +1012,9 @@ string_c:=first item
         assert_eq!(
             to_string(&T {
                 name: String::from("Your Name"),
-                other: Some(S { label: Some(String::from("My Name")) } ),
+                other: Some(S {
+                    label: Some(String::from("My Name"))
+                }),
             })?,
             "name: Your Name\nother:\n  label: My Name\n"
         );

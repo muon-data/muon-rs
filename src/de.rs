@@ -24,8 +24,6 @@ enum TextVal<'a> {
 /// Branch state
 #[derive(Debug)]
 enum BranchState {
-    /// First field of branch
-    First,
     /// Visiting fields of branch
     Visit,
     /// Clean up branch
@@ -56,7 +54,7 @@ impl<'a> Branch<'a> {
         Branch {
             fields,
             visited,
-            state: BranchState::First,
+            state: BranchState::Visit,
             key: None,
             list: false,
             substitute: None,
@@ -65,9 +63,7 @@ impl<'a> Branch<'a> {
 
     /// Create a new Branch
     fn new() -> Self {
-        let mut branch = Branch::with_fields(&[]);
-        branch.state = BranchState::Visit;
-        branch
+        Branch::with_fields(&[])
     }
 
     /// Get first field
@@ -192,33 +188,13 @@ impl<'a> MappingIter<'a> {
         self.stack.pop();
     }
 
-    /// Check if record is first field
-    fn check_first_record(&mut self) -> bool {
-        if let Some(branch) = self.stack.last_mut() {
-            match branch.state {
-                BranchState::First => {
-                    branch.state = BranchState::Visit;
-                    true
-                }
-                _ => false,
-            }
-        } else {
-            false
-        }
-    }
-
     /// Check record substitute
-    fn check_substitute(&mut self, first_record: bool) -> Result<()> {
+    fn check_substitute(&mut self) -> Result<()> {
         let indent = self.stack.len();
         if let Some(branch) = self.stack.last_mut() {
             if let Some(key) = branch.first_field() {
                 if let Some(define) = self.define.take() {
                     if define.value.len() > 0 && indent > 0 {
-                        if first_record {
-                            return Err(Error::FailedParse(
-                                ParseError::InvalidSubstitute,
-                            ));
-                        }
                         branch.substitute = Some(key);
                         self.define = Some(Define::new(
                             indent - 1,
@@ -254,7 +230,6 @@ impl<'a> MappingIter<'a> {
     fn set_list(&mut self, list: bool) {
         if let Some(branch) = self.stack.last_mut() {
             branch.list = list;
-            branch.state = BranchState::Visit;
         }
     }
 
@@ -755,9 +730,8 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        let first_record = self.mappings.check_first_record();
         self.mappings.push_stack(Branch::with_fields(fields));
-        self.mappings.check_substitute(first_record)?;
+        self.mappings.check_substitute()?;
         visitor.visit_map(self)
     }
 
@@ -944,34 +918,24 @@ mod test {
 
     #[test]
     fn nesting() -> Result<(), Box<Error>> {
-        assert_eq!(
-            D {
-                struct_e: {
-                    E {
-                        struct_f: F { int: 987654321 },
-                        flag: false,
-                    }
-                },
+        let d = D {
+            struct_e: {
+                E {
+                    struct_f: F { int: 321 },
+                    flag: false,
+                }
             },
-            from_str(
-                "struct_e:\n  struct_f:\n    int: 987_654_321\n  flag: false\n"
-            )?
+        };
+        assert_eq!(
+            d,
+            from_str("struct_e:\n  struct_f:\n    int: 321\n  flag: false\n")?
         );
         assert_eq!(
-            D {
-                struct_e: {
-                    E {
-                        struct_f: F { int: -123456 },
-                        flag: true,
-                    }
-                },
-            },
-            from_str(
-                "struct_e:\n  flag: true\n  struct_f:\n    int: -12_34_56\n"
-            )?
+            d,
+            from_str("struct_e:\n  flag: false\n  struct_f:\n    int: 321\n")?
         );
         match from_str::<E>("struct_f: 223344\n  int: 55\n") {
-            Err(Error::FailedParse(ParseError::InvalidSubstitute)) => (),
+            Err(Error::Deserialize(_)) => (),
             r => panic!("bad result {:?}", r),
         }
         Ok(())
@@ -1170,17 +1134,33 @@ mod test {
     }
     #[test]
     fn substitute_record() -> Result<(), Box<Error>> {
-        assert_eq!(
-            R {
-                name: F { int: 999 },
-                other: 15,
-            },
-            from_str("name:\n  int: 999\nother: 15\n")?
-        );
-        match from_str::<R>("name: 999\nother: 15\n") {
-            Err(Error::FailedParse(ParseError::InvalidSubstitute)) => (),
-            r => panic!("bad result {:?}", r),
+        let r = R {
+            name: F { int: 999 },
+            other: 15,
         };
+        assert_eq!(r, from_str("name: 999\nother: 15\n")?);
+        assert_eq!(r, from_str("name:\n  int: 999\nother: 15\n")?);
+        Ok(())
+    }
+
+    #[derive(Debug, Deserialize, PartialEq)]
+    struct S {
+        group: Option<T>,
+    }
+    #[derive(Debug, Deserialize, PartialEq)]
+    struct T {
+        label: String,
+    }
+    #[test]
+    fn no_substitute_optional() -> Result<(), Box<Error>> {
+        assert_eq!(
+            S {
+                group: Some(T {
+                    label: String::from("group label")
+                })
+            },
+            from_str("group: group label\n")?,
+        );
         Ok(())
     }
 }
