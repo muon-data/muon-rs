@@ -7,27 +7,47 @@ use crate::datetime::{Date, DateTime, Time};
 use crate::error::ParseError;
 use std::str::FromStr;
 
-/// A MuON value
-///
-/// Warning: this type is not fully implemented.
+/// Integer value enum
 #[derive(Debug)]
-#[allow(dead_code)]
+pub enum IntValue {
+    /// Unsigned integer value
+    Unsigned(u128),
+    /// Signed integer value
+    Signed(i128),
+}
+
+/// Number value enum
+#[derive(Debug)]
+pub enum NumValue {
+    /// 32-bit number
+    Num32(f32),
+    /// 64-bit number
+    Num64(f64),
+}
+
+/// A MuON value
+#[derive(Debug)]
 pub enum Value {
     /// Text value
     Text(String),
     /// Boolean value
     Bool(bool),
-    // Int(Integer),
-    // Number(Number),
+    /// Integer value
+    Int(IntValue),
+    /// Number value
+    Number(NumValue),
     /// Date and time with offset
     DateTime(DateTime),
     /// Date with no time or offset
     Date(Date),
     /// Time with no date or offset
     Time(Time),
-    // Record(Map<String, Value>),
-    // Dict(Map<Value, Value>),
-    // Any(Map<String, Value>),
+    /// Record value
+    Record(Vec<(String, Value)>),
+    /// Dictionary value
+    Dictionary(Vec<(Value, Value)>),
+    /// Any value
+    Any(Box<Value>),
     /// Optional value
     Optional(Option<Box<Value>>),
     /// List of values
@@ -78,9 +98,10 @@ pub enum Type {
     /// Record parses into a struct or
     /// [Value::Record](enum.Value.html#variant.Record)
     Record,
-    /// Dictionary parses into [HashMap](struct.HashMap.html)
+    /// Dictionary parses into [HashMap](struct.HashMap.html) or
+    /// [Value::Dictionary](enum.Value.html#variant.Dictionary)
     Dictionary,
-    /// Any type
+    /// Any parses into [Value::Any](enum.Value.html#variant.Any)
     Any,
 }
 

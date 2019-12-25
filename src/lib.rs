@@ -205,5 +205,5 @@ mod ser;
 pub use datetime::{Date, DateTime, Time, TimeOffset};
 pub use de::{from_reader, from_slice, from_str, Deserializer};
 pub use error::{Error, Result};
-pub use schema::Value;
+pub use schema::{IntValue, NumValue, Value};
 pub use ser::{to_string, to_vec, to_writer, Serializer};
