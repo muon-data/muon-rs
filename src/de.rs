@@ -14,11 +14,11 @@ use std::io::Read;
 use std::str;
 
 /// Parsed text value
-enum TextVal<'a> {
+enum TextVal<'de> {
     /// Owned text value
     Owned(String),
     /// Borrowed text value
-    Borrowed(&'a str),
+    Borrowed(&'de str),
 }
 
 /// Branch state
@@ -286,7 +286,8 @@ pub struct Deserializer<'de> {
 }
 
 impl<'de> Deserializer<'de> {
-    fn from_str(input: &'de str) -> Self {
+    /// Create a Deserializer from a string slice
+    fn new(input: &'de str) -> Self {
         let mappings = MappingIter::new(input);
         Deserializer { mappings }
     }
@@ -320,7 +321,7 @@ pub fn from_str<'a, T>(s: &'a str) -> Result<T>
 where
     T: Deserialize<'a>,
 {
-    let mut deserializer = Deserializer::from_str(s);
+    let mut deserializer = Deserializer::new(s);
     let t = T::deserialize(&mut deserializer)?;
     Ok(t)
 }
@@ -509,13 +510,16 @@ impl<'de> Deserializer<'de> {
 impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     type Error = Error;
 
-    fn deserialize_any<V>(self, _visitor: V) -> Result<V::Value>
+    fn deserialize_any<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        // FIXME: use schema to know what types to return
-        if let Some(branch) = self.mappings.stack.last() {
-            dbg!(&branch.key);
+        self.deserialize_identifier(visitor)?;
+        if let Some(schema) = self.mappings.defs.schema() {
+            dbg!(&schema);
+            dbg!(&self.mappings.stack);
+            dbg!(&self.mappings.define);
+            todo!("create Value from schema");
         }
         Err(Error::FailedParse(ParseError::UnexpectedKey))
     }
@@ -616,8 +620,8 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: Visitor<'de>,
     {
         match self.parse_text()? {
-            TextVal::Owned(val) => visitor.visit_str(&val),
-            TextVal::Borrowed(val) => visitor.visit_borrowed_str(&val),
+            TextVal::Owned(val) => visitor.visit_string(val),
+            TextVal::Borrowed(val) => visitor.visit_str(&val),
         }
     }
 

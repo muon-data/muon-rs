@@ -5,7 +5,7 @@
 use std::error::Error as _;
 use std::fmt::{self, Display};
 use std::io;
-use std::str;
+use std::str::{ParseBoolError, Utf8Error};
 
 /// Parse errors
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -19,6 +19,7 @@ pub enum ParseError {
     ExpectedNumber,
     ExpectedTime,
     ExpectedTimeOffset,
+    InvalidDefault,
     InvalidIndent,
     InvalidSeparator,
     InvalidSubstitute,
@@ -28,6 +29,12 @@ pub enum ParseError {
     MissingSeparator,
     UnexpectedKey,
     UnexpectedSchemaSeparator,
+}
+
+impl From<ParseBoolError> for ParseError {
+    fn from(_e: ParseBoolError) -> Self {
+        ParseError::ExpectedBool
+    }
 }
 
 impl ParseError {
@@ -43,6 +50,7 @@ impl ParseError {
             ExpectedNumber => "expected number",
             ExpectedTime => "expected time",
             ExpectedTimeOffset => "expected time offset",
+            InvalidDefault => "invalid default",
             InvalidIndent => "invalid indent",
             InvalidSeparator => "invalid separator",
             InvalidSubstitute => "invalid substitute value",
@@ -50,7 +58,7 @@ impl ParseError {
             MissingKey => "missing key",
             MissingLinefeed => "missing line feed",
             MissingSeparator => "missing separator",
-            UnexpectedKey => "unexpected key",
+            UnexpectedKey => "unexpected key (not in schema)",
             UnexpectedSchemaSeparator => "unexpected schema separator",
         }
     }
@@ -64,7 +72,7 @@ pub enum Error {
     /// Formatting error while serializing
     Format(fmt::Error),
     /// Invalid UTF-8 while deserializing
-    Utf8(str::Utf8Error),
+    Utf8(Utf8Error),
     /// Invalid UTF-8 while serializing
     FromUtf8(std::string::FromUtf8Error),
     /// Serializing error from serde
@@ -128,8 +136,8 @@ impl From<fmt::Error> for Error {
     }
 }
 
-impl From<str::Utf8Error> for Error {
-    fn from(e: str::Utf8Error) -> Self {
+impl From<Utf8Error> for Error {
+    fn from(e: Utf8Error) -> Self {
         Error::Utf8(e)
     }
 }
