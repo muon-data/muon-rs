@@ -2,7 +2,6 @@
 //
 // Copyright (c) 2019  Douglas Lau
 //
-use std::error::Error as _;
 use std::fmt::{self, Display};
 use std::io;
 use std::str::{ParseBoolError, Utf8Error};
@@ -37,10 +36,11 @@ impl From<ParseBoolError> for ParseError {
     }
 }
 
-impl ParseError {
-    fn description(&self) -> &'static str {
+impl Display for ParseError {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         use ParseError::*;
-        match self {
+
+        let description = match self {
             ExpectedBool => "expected bool",
             ExpectedMore => "expected more input data",
             ExpectedChar => "expected char",
@@ -60,7 +60,8 @@ impl ParseError {
             MissingSeparator => "missing separator",
             UnexpectedKey => "unexpected key (not in schema)",
             UnexpectedSchemaSeparator => "unexpected schema separator",
-        }
+        };
+        formatter.write_str(description)
     }
 }
 
@@ -104,24 +105,21 @@ impl serde::de::Error for Error {
 
 impl Display for Error {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str(self.description())
+        match self {
+            Error::IO(ref e) => e.fmt(formatter),
+            Error::Format(ref e) => e.fmt(formatter),
+            Error::Utf8(ref e) => e.fmt(formatter),
+            Error::FromUtf8(ref e) => e.fmt(formatter),
+            Error::Serialize(ref msg) => formatter.write_str(msg),
+            Error::Deserialize(ref msg) => formatter.write_str(msg),
+            Error::UnsupportedType(ref msg) => formatter.write_str(msg),
+            Error::InvalidKey => formatter.write_str("string keys only"),
+            Error::FailedParse(ref e) => e.fmt(formatter),
+        }
     }
 }
 
 impl std::error::Error for Error {
-    fn description(&self) -> &str {
-        match *self {
-            Error::IO(ref e) => e.description(),
-            Error::Format(ref e) => e.description(),
-            Error::Utf8(ref e) => e.description(),
-            Error::FromUtf8(ref e) => e.description(),
-            Error::Serialize(ref msg) => msg,
-            Error::Deserialize(ref msg) => msg,
-            Error::UnsupportedType(ref msg) => msg,
-            Error::InvalidKey => "string keys only",
-            Error::FailedParse(ref e) => e.description(),
-        }
-    }
 }
 
 impl From<io::Error> for Error {
