@@ -6,7 +6,7 @@ use crate::common::Define;
 use crate::datetime::{Date, DateTime, Time};
 use crate::error::ParseError;
 use crate::parse;
-use serde::{Deserialize, Deserializer, de::Visitor};
+use serde::{de::Visitor, Deserialize, Deserializer};
 use std::fmt;
 use std::str::FromStr;
 
@@ -95,73 +95,73 @@ impl<'de> Visitor<'de> for ValueVisitor {
     }
     fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E>
     where
-        E: serde::de::Error
+        E: serde::de::Error,
     {
         Ok(Value::Bool(v))
     }
     fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
     where
-        E: serde::de::Error
+        E: serde::de::Error,
     {
         Ok(Value::Int(IntValue::Signed(v.into())))
     }
     fn visit_i128<E>(self, v: i128) -> Result<Self::Value, E>
     where
-        E: serde::de::Error
+        E: serde::de::Error,
     {
         Ok(Value::Int(IntValue::Signed(v)))
     }
     fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
     where
-        E: serde::de::Error
+        E: serde::de::Error,
     {
         Ok(Value::Int(IntValue::Unsigned(v.into())))
     }
     fn visit_u128<E>(self, v: u128) -> Result<Self::Value, E>
     where
-        E: serde::de::Error
+        E: serde::de::Error,
     {
         Ok(Value::Int(IntValue::Unsigned(v)))
     }
     fn visit_f32<E>(self, v: f32) -> Result<Self::Value, E>
     where
-        E: serde::de::Error
+        E: serde::de::Error,
     {
         Ok(Value::Number(NumValue::Num32(v)))
     }
     fn visit_f64<E>(self, v: f64) -> Result<Self::Value, E>
     where
-        E: serde::de::Error
+        E: serde::de::Error,
     {
         Ok(Value::Number(NumValue::Num64(v)))
     }
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
     where
-        E: serde::de::Error
+        E: serde::de::Error,
     {
         Ok(Value::Text(v.into()))
     }
     fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
     where
-        E: serde::de::Error
+        E: serde::de::Error,
     {
         Ok(Value::Text(v.into()))
     }
     fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
     where
-        E: serde::de::Error
+        E: serde::de::Error,
     {
         Ok(Value::Text(v))
     }
     fn visit_none<E>(self) -> Result<Self::Value, E>
     where
-        E: serde::de::Error
+        E: serde::de::Error,
     {
         Ok(Value::Optional(None))
     }
     fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
-        D: Deserializer<'de>
+        D: Deserializer<'de>,
     {
         let v = deserializer.deserialize_any(self)?;
         Ok(Value::Optional(Some(Box::new(v))))
@@ -171,7 +171,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
 impl<'de> Deserialize<'de> for Value {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'de>
+        D: Deserializer<'de>,
     {
         deserializer.deserialize_any(ValueVisitor {})
     }
@@ -275,9 +275,11 @@ impl FromStr for Type {
 
 impl Type {
     /// Parse a value by type
-    fn parse_value(&self, modifier: &Option<Modifier>, v: &str)
-        -> Result<Value, ParseError>
-    {
+    fn parse_value(
+        &self,
+        modifier: &Option<Modifier>,
+        v: &str,
+    ) -> Result<Value, ParseError> {
         match (modifier, self) {
             (None, Type::Text) => Ok(Value::Text(String::from(v))),
             (None, Type::Bool) => Ok(Value::Bool(v.parse()?)),
@@ -301,9 +303,10 @@ impl<'a> Node<'a> {
         let mut v = value.splitn(2, ' ');
         if let Some(tp) = v.next() {
             let node_type: Type = tp.parse()?;
-            let default = v.next().map(|dflt| {
-                node_type.parse_value(&modifier, dflt)
-            }).transpose()?;
+            let default = v
+                .next()
+                .map(|dflt| node_type.parse_value(&modifier, dflt))
+                .transpose()?;
             Ok(Node {
                 indent,
                 name,
