@@ -1,6 +1,6 @@
 // error.rs
 //
-// Copyright (c) 2019  Douglas Lau
+// Copyright (c) 2019-2020  Douglas Lau
 //
 use std::fmt::{self, Display};
 use std::io;
@@ -30,17 +30,10 @@ pub enum ParseError {
     UnexpectedSchemaSeparator,
 }
 
-impl From<ParseBoolError> for ParseError {
-    fn from(_e: ParseBoolError) -> Self {
-        ParseError::ExpectedBool
-    }
-}
-
-impl Display for ParseError {
-    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+impl ParseError {
+    fn description(self) -> &'static str {
         use ParseError::*;
-
-        let description = match self {
+        match self {
             ExpectedBool => "expected bool",
             ExpectedMore => "expected more input data",
             ExpectedChar => "expected char",
@@ -60,8 +53,19 @@ impl Display for ParseError {
             MissingSeparator => "missing separator",
             UnexpectedKey => "unexpected key (not in schema)",
             UnexpectedSchemaSeparator => "unexpected schema separator",
-        };
-        formatter.write_str(description)
+        }
+    }
+}
+
+impl From<ParseBoolError> for ParseError {
+    fn from(_e: ParseBoolError) -> Self {
+        ParseError::ExpectedBool
+    }
+}
+
+impl Display for ParseError {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str(self.description())
     }
 }
 
