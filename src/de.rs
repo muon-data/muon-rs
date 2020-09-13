@@ -830,6 +830,7 @@ mod test {
     use super::super::datetime::*;
     use super::{from_str, Error, ParseError};
     use serde::Deserialize;
+    use std::collections::HashMap;
 
     #[derive(Deserialize, PartialEq, Debug)]
     struct A {
@@ -1207,6 +1208,21 @@ mod test {
             Err(Error::FailedParse(ParseError::InvalidSubstitute)) => (),
             r => panic!("bad result {:?}", r),
         };
+        Ok(())
+    }
+
+    #[derive(Debug, Deserialize, PartialEq)]
+    struct V {
+        dict: HashMap<String, String>,
+    }
+    #[test]
+    fn hashmap_dict() -> Result<(), Box<Error>> {
+        let mut v = V {
+            dict: HashMap::new(),
+        };
+        assert_eq!(v, from_str("dict:\n")?);
+        v.dict.insert("key".to_string(), "value".to_string());
+        assert_eq!(v, from_str("dict:\n  key: value\n")?);
         Ok(())
     }
 }
