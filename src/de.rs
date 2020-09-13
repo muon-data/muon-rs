@@ -1,6 +1,6 @@
 // de.rs
 //
-// Copyright (c) 2019  Douglas Lau
+// Copyright (c) 2019-2020  Douglas Lau
 //
 use crate::common::{Define, Separator};
 use crate::error::{Error, ParseError, Result};
@@ -28,6 +28,8 @@ enum BranchState {
     Visit,
     /// Clean up branch
     Cleanup,
+    /// Done with cleanup
+    Done,
 }
 
 /// Branch for stack
@@ -86,9 +88,9 @@ impl<'a> Branch<'a> {
         }
     }
 
-    /// Check for any unvisited fields
-    fn has_unvisited(&self) -> bool {
-        self.visited.iter().any(|v| !v)
+    /// Check whether all fields have been visited
+    fn all_visited(&self) -> bool {
+        self.visited.iter().all(|v| *v)
     }
 
     /// Cleanup state for one field
@@ -118,6 +120,8 @@ struct MappingIter<'a> {
     define: Option<Define<'a>>,
     /// Stack of nested branches
     stack: Vec<Branch<'a>>,
+    /// Flag when a branch is done
+    branch_done: bool,
 }
 
 impl<'a> Iterator for MappingIter<'a> {
@@ -145,6 +149,7 @@ impl<'a> MappingIter<'a> {
             defs,
             define,
             stack,
+            branch_done: false,
         }
     }
 
@@ -185,6 +190,7 @@ impl<'a> MappingIter<'a> {
 
     /// Pop from the branch stack
     fn pop_stack(&mut self) {
+        self.branch_done = false;
         self.stack.pop();
     }
 
@@ -209,16 +215,6 @@ impl<'a> MappingIter<'a> {
         Ok(())
     }
 
-    /// Check if cleanup is needed
-    fn check_cleanup(&mut self) -> bool {
-        if let Some(branch) = self.stack.last_mut() {
-            branch.state = BranchState::Cleanup;
-            branch.has_unvisited()
-        } else {
-            false
-        }
-    }
-
     /// Set the current key on stack
     fn set_key(&mut self, key: Option<&'a str>) {
         if let Some(branch) = self.stack.last_mut() {
@@ -241,12 +237,33 @@ impl<'a> MappingIter<'a> {
         }
     }
 
-    /// Check indent nesting
+    /// Check whether indent nesting matches
     fn check_indent(&mut self) -> Result<bool> {
         match self.peek()? {
             Some(define) => Ok(define.check_indent(self.stack.len())),
             None => Ok(false),
         }
+    }
+
+    /// Check if all fields of branch have been visited
+    fn check_all_visited(&mut self) -> bool {
+        if let Some(branch) = self.stack.last_mut() {
+            if branch.all_visited() {
+                branch.state = BranchState::Done;
+                true
+            } else {
+                branch.state = BranchState::Cleanup;
+                false
+            }
+        } else {
+            true
+        }
+    }
+
+    /// Check whether the current branch is done
+    fn check_branch_done(&mut self) -> Result<bool> {
+        self.branch_done |= !self.check_indent()?;
+        Ok(self.branch_done && self.check_all_visited())
     }
 
     /// Check that key matches
@@ -619,6 +636,9 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
+        if self.mappings.branch_done {
+            return Err(Error::FailedParse(ParseError::MissingField));
+        }
         match self.parse_text()? {
             TextVal::Owned(val) => visitor.visit_string(val),
             TextVal::Borrowed(val) => visitor.visit_str(&val),
@@ -795,11 +815,11 @@ impl<'de> MapAccess<'de> for Deserializer<'de> {
     where
         K: DeserializeSeed<'de>,
     {
-        if self.mappings.check_indent()? || self.mappings.check_cleanup() {
-            seed.deserialize(&mut *self).map(Some)
-        } else {
+        if self.mappings.check_branch_done()? {
             self.mappings.pop_stack();
             Ok(None)
+        } else {
+            seed.deserialize(&mut *self).map(Some)
         }
     }
 
@@ -1058,6 +1078,16 @@ mod test {
             ],
         };
         assert_eq!(expected, from_str(j)?);
+        Ok(())
+    }
+
+    #[test]
+    fn record_bad() -> Result<(), Box<Error>> {
+        let j = "person:\n  score: 500\nperson:\n  name: Josef Stalin\n  score: 250\n";
+        match from_str::<J>(j) {
+            Err(Error::FailedParse(ParseError::MissingField)) => (),
+            r => panic!("bad result {:?}", r),
+        };
         Ok(())
     }
 

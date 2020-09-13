@@ -7,6 +7,7 @@ use std::io;
 use std::str::{ParseBoolError, Utf8Error};
 
 /// Parse errors
+#[non_exhaustive]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ParseError {
     ExpectedBool,
@@ -23,6 +24,7 @@ pub enum ParseError {
     InvalidSeparator,
     InvalidSubstitute,
     InvalidType,
+    MissingField,
     MissingKey,
     MissingLinefeed,
     MissingSeparator,
@@ -48,6 +50,7 @@ impl ParseError {
             InvalidSeparator => "invalid separator",
             InvalidSubstitute => "invalid substitute value",
             InvalidType => "invalid type",
+            MissingField => "missing field",
             MissingKey => "missing key",
             MissingLinefeed => "missing line feed",
             MissingSeparator => "missing separator",
@@ -123,8 +126,7 @@ impl Display for Error {
     }
 }
 
-impl std::error::Error for Error {
-}
+impl std::error::Error for Error {}
 
 impl From<io::Error> for Error {
     fn from(e: io::Error) -> Self {
