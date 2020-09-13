@@ -22,14 +22,12 @@ enum TextVal<'de> {
 }
 
 /// Branch state
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 enum BranchState {
     /// Visiting fields of branch
     Visit,
     /// Clean up branch
     Cleanup,
-    /// Done with cleanup
-    Done,
 }
 
 /// Branch for stack
@@ -88,14 +86,9 @@ impl<'a> Branch<'a> {
         }
     }
 
-    /// Check whether all fields have been visited
-    fn all_visited(&self) -> bool {
-        self.visited.iter().all(|v| *v)
-    }
-
     /// Cleanup state for one field
     fn cleanup_visit(&mut self) -> Option<&'static str> {
-        if let BranchState::Cleanup = self.state {
+        if self.state == BranchState::Cleanup {
             for i in 0..self.fields.len() {
                 if !self.visited[i] {
                     self.visited[i] = true;
@@ -104,6 +97,11 @@ impl<'a> Branch<'a> {
             }
         }
         None
+    }
+
+    /// Check whether all fields have been visited
+    fn all_visited(&self) -> bool {
+        self.visited.iter().all(|v| *v)
     }
 
     /// Check if current field is substitute
@@ -120,8 +118,6 @@ struct MappingIter<'a> {
     define: Option<Define<'a>>,
     /// Stack of nested branches
     stack: Vec<Branch<'a>>,
-    /// Flag when a branch is done
-    branch_done: bool,
 }
 
 impl<'a> Iterator for MappingIter<'a> {
@@ -149,7 +145,6 @@ impl<'a> MappingIter<'a> {
             defs,
             define,
             stack,
-            branch_done: false,
         }
     }
 
@@ -190,7 +185,6 @@ impl<'a> MappingIter<'a> {
 
     /// Pop from the branch stack
     fn pop_stack(&mut self) {
-        self.branch_done = false;
         self.stack.pop();
     }
 
@@ -245,25 +239,25 @@ impl<'a> MappingIter<'a> {
         }
     }
 
-    /// Check if all fields of branch have been visited
-    fn check_all_visited(&mut self) -> bool {
-        if let Some(branch) = self.stack.last_mut() {
-            if branch.all_visited() {
-                branch.state = BranchState::Done;
-                true
-            } else {
-                branch.state = BranchState::Cleanup;
-                false
-            }
-        } else {
-            true
+    /// Get state of current branch
+    fn branch_state(&self) -> BranchState {
+        match &self.stack.last() {
+            Some(branch) => branch.state,
+            None => BranchState::Cleanup,
         }
     }
 
     /// Check whether the current branch is done
     fn check_branch_done(&mut self) -> Result<bool> {
-        self.branch_done |= !self.check_indent()?;
-        Ok(self.branch_done && self.check_all_visited())
+        let done = !self.check_indent()?;
+        if let Some(branch) = self.stack.last_mut() {
+            if done {
+                branch.state = BranchState::Cleanup;
+            }
+            Ok(branch.state == BranchState::Cleanup && branch.all_visited())
+        } else {
+            Ok(true)
+        }
     }
 
     /// Check that key matches
@@ -636,7 +630,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        if self.mappings.branch_done {
+        if self.mappings.branch_state() == BranchState::Cleanup {
             return Err(Error::FailedParse(ParseError::MissingField));
         }
         match self.parse_text()? {
