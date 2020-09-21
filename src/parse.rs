@@ -1,6 +1,6 @@
 // parse.rs
 //
-// Copyright (c) 2019  Douglas Lau
+// Copyright (c) 2019-2020  Douglas Lau
 //
 use std::str::FromStr;
 
@@ -36,9 +36,9 @@ pub fn int<T: Integer>(v: &str) -> Option<T> {
 
 /// Fallback for integer parsing
 fn int_fallback<T: Integer>(v: &str) -> Option<T> {
-    if v.starts_with("b") {
+    if v.starts_with('b') {
         T::from_str_radix(&sanitize_num(&v[1..], 2), 2)
-    } else if v.starts_with("x") {
+    } else if v.starts_with('x') {
         T::from_str_radix(&sanitize_num(&v[1..], 16), 16)
     } else {
         sanitize_num(v, 10).parse().ok()

@@ -1,6 +1,6 @@
 // lines.rs
 //
-// Copyright (c) 2019  Douglas Lau
+// Copyright (c) 2019-2020  Douglas Lau
 //
 use crate::common::{Define, Separator};
 use crate::error::ParseError;
@@ -137,7 +137,7 @@ impl State {
 impl<'a> Line<'a> {
     /// Create line from input
     fn new(line: &'a str) -> Result<Self, ParseError> {
-        if line.len() == 0 {
+        if line.is_empty() {
             Ok(Line::Blank)
         } else if line == ":::" {
             Ok(Line::SchemaSeparator)
@@ -185,7 +185,7 @@ impl<'a> Iterator for LineIter<'a> {
                     None
                 }
             }
-        } else if self.input.len() > 0 {
+        } else if !self.input.is_empty() {
             self.error = Some(ParseError::MissingLinefeed);
             None
         } else {

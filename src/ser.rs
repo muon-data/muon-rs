@@ -1,6 +1,6 @@
 // ser.rs
 //
-// Copyright (c) 2019  Douglas Lau
+// Copyright (c) 2019-2020  Douglas Lau
 //
 use crate::common::Separator;
 use crate::error::{Error, Result};
@@ -240,7 +240,7 @@ impl<W: Write> Serializer<W> {
                     self.visit_branch(n + 1);
                     break;
                 }
-                _ => write!(self.writer, ":\n")?,
+                _ => writeln!(self.writer, ":")?,
             }
         }
         self.set_indent();
@@ -258,7 +258,7 @@ impl<W: Write> Serializer<W> {
 
     /// Mark a branch as visited (key has been written)
     fn visit_branch(&mut self, n: usize) {
-        if let Some(branch) = self.stack.iter_mut().nth(n) {
+        if let Some(branch) = self.stack.get_mut(n) {
             branch.visited = true;
         }
     }
@@ -267,7 +267,7 @@ impl<W: Write> Serializer<W> {
     fn write_key(&mut self, n: usize) -> Result<()> {
         self.write_linefeed()?;
         self.write_indent(n)?;
-        if let Some(branch) = self.stack.iter_mut().nth(n) {
+        if let Some(branch) = self.stack.get_mut(n) {
             if let Some(key) = &branch.key {
                 write!(self.writer, "{}", key)?;
             }
@@ -281,7 +281,7 @@ impl<W: Write> Serializer<W> {
         let indent = self.nesting();
         if indent > 0 {
             self.write_key(indent - 1)?;
-            write!(self.writer, ":\n")?;
+            writeln!(self.writer, ":")?;
         }
         Ok(())
     }
@@ -289,7 +289,7 @@ impl<W: Write> Serializer<W> {
     /// Write a line feed if necessary
     fn write_linefeed(&mut self) -> Result<()> {
         if let LinePos::AfterValue = self.line {
-            write!(self.writer, "\n")?;
+            writeln!(self.writer)?;
             self.line = LinePos::Start;
         }
         Ok(())

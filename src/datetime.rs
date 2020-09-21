@@ -1,6 +1,6 @@
 // datetime.rs
 //
-// Copyright (c) 2019  Douglas Lau
+// Copyright (c) 2019-2020  Douglas Lau
 //
 //! Module for RFC 3339 dates and times.
 use crate::error::ParseError;
@@ -193,7 +193,7 @@ fn parse_second(second: &[u8], leap_sec: bool) -> Option<u8> {
 
 /// Parse a nanosecond
 fn parse_nanosecond(nano: &[u8]) -> Option<u32> {
-    if nano.len() == 0 {
+    if nano.is_empty() {
         Some(0)
     } else if nano.len() >= 2 && nano[0] == b'.' {
         let mut ns = 0;

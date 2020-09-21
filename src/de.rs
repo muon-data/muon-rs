@@ -194,7 +194,7 @@ impl<'a> MappingIter<'a> {
         if let Some(branch) = self.stack.last_mut() {
             if let Some(key) = branch.first_field() {
                 if let Some(define) = self.define.take() {
-                    if define.value.len() > 0 && indent > 0 {
+                    if !define.value.is_empty() && indent > 0 {
                         branch.substitute = Some(key);
                         self.define = Some(Define::new(
                             indent - 1,
@@ -447,17 +447,13 @@ impl<'de> Deserializer<'de> {
     /// Peek the current key
     fn peek_key(&mut self) -> Result<&'de str> {
         let def = self.mappings.peek()?;
-        match self.define_result(def)? {
-            define => Ok(define.key),
-        }
+        Ok(self.define_result(def)?.key)
     }
 
     /// Get the current value
     fn get_value(&mut self) -> Result<&'de str> {
         let def = self.mappings.next();
-        match self.define_result(def)? {
-            define => Ok(define.value),
-        }
+        Ok(self.define_result(def)?.value)
     }
 
     /// Parse a text value
