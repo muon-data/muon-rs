@@ -24,7 +24,7 @@ fn derived_ser_de() -> muon::Result<()> {
 #[test]
 fn derived_de_ser() -> muon::Result<()> {
     let s = "name: Me, Myself\nage: 99\ndebt: -2\n";
-    let a: A = muon::from_str(&s)?;
+    let a: A = muon::from_str(s)?;
     let ss = muon::to_string(&a)?;
     assert_eq!(s, ss);
     Ok(())
@@ -50,7 +50,7 @@ struct Person {
 
 #[test]
 fn people() -> muon::Result<()> {
-    let g: Groups = muon::from_str(&include_str!("people.muon"))?;
+    let g: Groups = muon::from_str(include_str!("people.muon"))?;
     assert_eq!(muon::to_string(&g)?, include_str!("people.muon"));
     Ok(())
 }

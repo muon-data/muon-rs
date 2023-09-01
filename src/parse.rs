@@ -113,13 +113,13 @@ mod test {
 
     #[test]
     fn numbers() {
-        assert_eq!(number::<f32>("+3.14159").unwrap(), 3.14159);
+        assert_eq!(number::<f32>("+3.1415927").unwrap(), std::f32::consts::PI);
         assert_eq!(number::<f32>("-0.0").unwrap(), -0.0);
         assert_eq!(number::<f32>("1e15").unwrap(), 1e15);
         assert_eq!(number::<f32>("0.5431e-28").unwrap(), 0.5431e-28);
         assert_eq!(number::<f32>(".123456").unwrap(), 0.123456);
         assert_eq!(number::<f32>("0.1e1_2").unwrap(), 0.1e12);
-        assert_eq!(number::<f32>("8_765.432_1").unwrap(), 8_765.432_1);
+        assert_eq!(number::<f32>("8_765.432").unwrap(), 8_765.432);
         assert_eq!(number::<f32>("100").unwrap(), 100.0);
         assert!(number::<f32>("123_.456").is_none());
         assert!(number::<f32>("_123.456").is_none());
