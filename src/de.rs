@@ -889,9 +889,9 @@ mod test {
 
     #[test]
     fn numbers() -> Result<(), Box<Error>> {
-        let c = "float: +3.14159\ndouble: -123.456789e0\n";
+        let c = "float: +3.1415927\ndouble: -123.456789e0\n";
         let expected = C {
-            float: 3.14159,
+            float: std::f32::consts::PI,
             double: -123.456789,
         };
         assert_eq!(expected, from_str(c)?);
@@ -901,9 +901,9 @@ mod test {
             double: std::f64::INFINITY,
         };
         assert_eq!(expected, from_str(c)?);
-        let c = "float: 8_765.432_1\ndouble: -inf\n";
+        let c = "float: 8_765.432\ndouble: -inf\n";
         let expected = C {
-            float: 8_765.432_1,
+            float: 8_765.432,
             double: std::f64::NEG_INFINITY,
         };
         assert_eq!(expected, from_str(c)?);
@@ -1091,11 +1091,11 @@ mod test {
     }
     #[test]
     fn datetime() -> Result<(), Box<Error>> {
-        let date = "2019-08-07".parse().map_err(|e| Error::FailedParse(e))?;
-        let time = "12:34:56.789".parse().map_err(|e| Error::FailedParse(e))?;
+        let date = "2019-08-07".parse().map_err(Error::FailedParse)?;
+        let time = "12:34:56.789".parse().map_err(Error::FailedParse)?;
         let datetime = "1999-12-31T23:59:59.999-00:00"
             .parse()
-            .map_err(|e| Error::FailedParse(e))?;
+            .map_err(Error::FailedParse)?;
         assert_eq!(
             M { name: "one day".to_string(), date, time, datetime },
             from_str("name: one day\ndate: 2019-08-07\ntime: 12:34:56.789\ndatetime: 1999-12-31T23:59:59.999-00:00\n")?
