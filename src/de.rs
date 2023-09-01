@@ -631,7 +631,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         }
         match self.parse_text()? {
             TextVal::Owned(val) => visitor.visit_string(val),
-            TextVal::Borrowed(val) => visitor.visit_str(&val),
+            TextVal::Borrowed(val) => visitor.visit_str(val),
         }
     }
 

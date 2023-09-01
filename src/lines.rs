@@ -111,10 +111,7 @@ impl State {
     /// Check if line state is done
     fn is_done(&self) -> bool {
         use State::*;
-        match self {
-            Error(_) | Comment | DefDone(_, _) => true,
-            _ => false,
-        }
+        matches!(self, Error(_) | Comment | DefDone(_, _))
     }
 
     /// Convert state to a Line
@@ -235,10 +232,10 @@ impl<'a> DefIter<'a> {
 
     /// Set the indent spaces if needed
     fn set_indent_spaces(&mut self, key: &'a str) -> Result<(), ParseError> {
-        if self.indent_spaces == None {
+        if self.indent_spaces.is_none() {
             match key_indent(key) {
                 // Only 2, 3 or 4 space indents are valid
-                Some(sp) if sp >= 2 && sp <= 4 => {
+                Some(sp) if (2..=4).contains(&sp) => {
                     self.indent_spaces = Some(sp);
                     Ok(())
                 }
