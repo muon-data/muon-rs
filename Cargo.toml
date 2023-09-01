@@ -10,7 +10,7 @@ repository = "https://github.com/muon-data/muon-rs"
 readme = "README.md"
 keywords = ["serialization", "serde"]
 categories = ["encoding"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 serde = "1.0"
