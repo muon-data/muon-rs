@@ -31,25 +31,26 @@ pub trait Number: FromStr + std::ops::Neg<Output = Self> {
     fn nan(sign: Sign) -> Self;
 }
 
-impl Number for f32 {
-    const INFINITY: Self = f32::INFINITY;
-    const NEG_INFINITY: Self = f32::NEG_INFINITY;
+macro_rules! impl_number {
+    () => {};
+    (
+        ($n:ident, $i:ident, $b:literal) $(,)?
+        $(($more_n:ident, $more_i:ident, $more_b:literal))*
+    ) => {
+        impl Number for $n {
+            const INFINITY: Self = $n::INFINITY;
+            const NEG_INFINITY: Self = $n::NEG_INFINITY;
 
-    fn nan(sign: Sign) -> Self {
-        let sign_mask = !(u32::from(sign == Sign::Positive) << 31);
-        f32::from_bits(u32::MAX & sign_mask)
-    }
+            fn nan(sign: Sign) -> Self {
+                let sign_mask = !($i::from(sign == Sign::Positive) << $b);
+                $n::from_bits($i::MAX & sign_mask)
+            }
+        }
+        impl_number!($(($more_n, $more_i, $more_b))*);
+    };
 }
 
-impl Number for f64 {
-    const INFINITY: Self = f64::INFINITY;
-    const NEG_INFINITY: Self = f64::NEG_INFINITY;
-
-    fn nan(sign: Sign) -> Self {
-        let sign_mask = !(u64::from(sign == Sign::Positive) << 63);
-        f64::from_bits(u64::MAX & sign_mask)
-    }
-}
+impl_number!((f32, u32, 31), (f64, u64, 63));
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum Sign {
