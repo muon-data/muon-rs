@@ -23,11 +23,39 @@ macro_rules! impl_integer {
 
 impl_integer!(i8 i16 i32 i64 i128 isize u8 u16 u32 u64 u128 usize);
 
-/// Marker trait for number types
-pub trait Number: FromStr {}
+/// Number trait
+pub trait Number: FromStr + std::ops::Neg<Output = Self> {
+    const INFINITY: Self;
+    const NEG_INFINITY: Self;
 
-impl Number for f32 {}
-impl Number for f64 {}
+    fn nan(sign: Sign) -> Self;
+}
+
+impl Number for f32 {
+    const INFINITY: Self = f32::INFINITY;
+    const NEG_INFINITY: Self = f32::NEG_INFINITY;
+
+    fn nan(sign: Sign) -> Self {
+        let sign_mask = !(u32::from(sign == Sign::Positive) << 31);
+        f32::from_bits(u32::MAX & sign_mask)
+    }
+}
+
+impl Number for f64 {
+    const INFINITY: Self = f64::INFINITY;
+    const NEG_INFINITY: Self = f64::NEG_INFINITY;
+
+    fn nan(sign: Sign) -> Self {
+        let sign_mask = !(u64::from(sign == Sign::Positive) << 63);
+        f64::from_bits(u64::MAX & sign_mask)
+    }
+}
+
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub enum Sign {
+    Negative,
+    Positive,
+}
 
 /// Parse an integer from a string slice
 pub fn int<T: Integer>(v: &str) -> Option<T> {
@@ -47,7 +75,23 @@ fn int_fallback<T: Integer>(v: &str) -> Option<T> {
 
 /// Parse a number from a string slice
 pub fn number<T: Number>(v: &str) -> Option<T> {
-    v.parse().ok().or_else(|| sanitize_num(v, 10).parse().ok())
+    let (v, sign) = if let Some(v) = v.strip_prefix('-') {
+        (v, Sign::Negative)
+    } else {
+        (v.strip_prefix('+').unwrap_or(v), Sign::Positive)
+    };
+    let first = 'value: {
+        return Some(match (v, sign) {
+            ("inf", Sign::Negative) => T::NEG_INFINITY,
+            ("inf", Sign::Positive) => T::INFINITY,
+            ("NaN", sign) => T::nan(sign),
+            _ => break 'value v.chars().next()?,
+        });
+    };
+
+    (first.is_ascii_digit() || first == '.')
+        .then(|| v.parse().ok().or_else(|| sanitize_num(v, 10).parse().ok()))?
+        .map(|v: T| if sign == Sign::Negative { -v } else { v })
 }
 
 /// Sanitize a number, removing valid underscores
@@ -121,19 +165,22 @@ mod test {
         assert_eq!(number::<f32>("0.1e1_2").unwrap(), 0.1e12);
         assert_eq!(number::<f32>("8_765.432").unwrap(), 8_765.432);
         assert_eq!(number::<f32>("100").unwrap(), 100.0);
-        assert!(number::<f32>("123_.456").is_none());
-        assert!(number::<f32>("_123.456").is_none());
-        assert!(number::<f32>("123.456_").is_none());
-        assert!(number::<f32>("123._456").is_none());
-        assert!(number::<f32>("12.34.56").is_none());
-        assert_eq!(number::<f32>("NaN").unwrap().to_string(), "NaN");
+        assert_eq!(number::<f32>("123_.456"), None);
+        assert_eq!(number::<f32>("_123.456"), None);
+        assert_eq!(number::<f32>("123.456_"), None);
+        assert_eq!(number::<f32>("123._456"), None);
+        assert_eq!(number::<f32>("12.34.56"), None);
         assert_eq!(number::<f64>("-123.456789e0").unwrap(), -123.456789);
         assert_eq!(number::<f64>("inf").unwrap(), std::f64::INFINITY);
         assert_eq!(number::<f64>("-inf").unwrap(), std::f64::NEG_INFINITY);
-        assert!(number::<f64>("1__0.0").is_none());
-        assert!(number::<f64>("infinity").is_none());
-        assert!(number::<f64>("INF").is_none());
-        assert!(number::<f64>("nan").is_none());
-        assert!(number::<f64>("nAn").is_none());
+        assert_eq!(number::<f64>("1__0.0"), None);
+        assert_eq!(number::<f64>("infinity"), None);
+        assert_eq!(number::<f64>("INF"), None);
+        assert_eq!(number::<f64>("nan"), None);
+        assert_eq!(number::<f64>("nAn"), None);
+        assert!(number::<f32>("NaN").unwrap().is_nan());
+        assert!(number::<f32>("-NaN").unwrap().is_nan());
+        assert!(number::<f32>("NaN").unwrap().is_sign_positive());
+        assert!(number::<f32>("-NaN").unwrap().is_sign_negative());
     }
 }
