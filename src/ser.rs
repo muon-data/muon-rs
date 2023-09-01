@@ -210,7 +210,7 @@ impl<W: Write> Serializer<W> {
     where
         T: ?Sized + Serialize,
     {
-        Ok(t.serialize(&mut *self)?)
+        t.serialize(&mut *self)
     }
 
     /// Serialize an item

@@ -36,10 +36,10 @@ pub fn int<T: Integer>(v: &str) -> Option<T> {
 
 /// Fallback for integer parsing
 fn int_fallback<T: Integer>(v: &str) -> Option<T> {
-    if v.starts_with('b') {
-        T::from_str_radix(&sanitize_num(&v[1..], 2), 2)
-    } else if v.starts_with('x') {
-        T::from_str_radix(&sanitize_num(&v[1..], 16), 16)
+    if let Some(binary) = v.strip_prefix('b') {
+        T::from_str_radix(&sanitize_num(binary, 2), 2)
+    } else if let Some(hexadecimal) = v.strip_prefix('x') {
+        T::from_str_radix(&sanitize_num(hexadecimal, 16), 16)
     } else {
         sanitize_num(v, 10).parse().ok()
     }

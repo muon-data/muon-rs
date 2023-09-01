@@ -192,12 +192,15 @@ pub struct Node<'a> {
     /// Indent level
     indent: usize,
     /// Type name
+    #[allow(dead_code)]
     name: &'a str,
     /// Type modifier
+    #[allow(dead_code)]
     modifier: Option<Modifier>,
     /// Node type
     node_type: Type,
     /// Default value
+    #[allow(dead_code)]
     default: Option<Value>,
 }
 

@@ -113,15 +113,15 @@ impl serde::de::Error for Error {
 impl Display for Error {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Error::IO(ref e) => e.fmt(formatter),
-            Error::Format(ref e) => e.fmt(formatter),
-            Error::Utf8(ref e) => e.fmt(formatter),
-            Error::FromUtf8(ref e) => e.fmt(formatter),
-            Error::Serialize(ref msg) => formatter.write_str(msg),
-            Error::Deserialize(ref msg) => formatter.write_str(msg),
-            Error::UnsupportedType(ref msg) => formatter.write_str(msg),
+            Error::IO(e) => e.fmt(formatter),
+            Error::Format(e) => e.fmt(formatter),
+            Error::Utf8(e) => e.fmt(formatter),
+            Error::FromUtf8(e) => e.fmt(formatter),
+            Error::Serialize(msg) => formatter.write_str(msg),
+            Error::Deserialize(msg) => formatter.write_str(msg),
+            Error::UnsupportedType(msg) => formatter.write_str(msg),
             Error::InvalidKey => formatter.write_str("string keys only"),
-            Error::FailedParse(ref e) => e.fmt(formatter),
+            Error::FailedParse(e) => e.fmt(formatter),
         }
     }
 }

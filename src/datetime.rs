@@ -105,7 +105,7 @@ fn is_leap_year(year: u16) -> bool {
 
 /// Convert ASCII digit to a number
 fn digit(b: u8) -> Option<u8> {
-    if b >= b'0' && b <= b'9' {
+    if b.is_ascii_digit() {
         Some(b - b'0')
     } else {
         None
@@ -134,10 +134,7 @@ fn parse_4_digits(ascii: &[u8]) -> Option<u16> {
 
 /// Parse a 4-digit year
 fn parse_year(year: &[u8]) -> Option<u16> {
-    match parse_4_digits(year) {
-        Some(year) => Some(year),
-        _ => None,
-    }
+    parse_4_digits(year)
 }
 
 /// Parse a 2-digit ASCII decimal number
@@ -153,7 +150,7 @@ fn parse_2_digits(ascii: &[u8]) -> Option<u8> {
 /// Parse a 2-digit month
 fn parse_month(month: &[u8]) -> Option<u8> {
     match parse_2_digits(month) {
-        Some(month) if month >= 1 && month <= 12 => Some(month),
+        Some(month) if (1..=12).contains(&month) => Some(month),
         _ => None,
     }
 }
@@ -161,7 +158,7 @@ fn parse_month(month: &[u8]) -> Option<u8> {
 /// Parse a 2-digit day
 fn parse_day(day: &[u8]) -> Option<u8> {
     match parse_2_digits(day) {
-        Some(day) if day >= 1 && day <= 31 => Some(day),
+        Some(day) if (1..=31).contains(&day) => Some(day),
         _ => None,
     }
 }
@@ -260,7 +257,7 @@ impl<'de> de::Deserialize<'de> for DateTime {
                 match s.parse() {
                     Ok(datetime) => Ok(datetime),
                     Err(_) => Err(de::Error::invalid_value(
-                        de::Unexpected::Str(&s),
+                        de::Unexpected::Str(s),
                         &self,
                     )),
                 }
@@ -349,7 +346,7 @@ impl<'de> de::Deserialize<'de> for Date {
                 match s.parse() {
                     Ok(date) => Ok(date),
                     Err(_) => Err(de::Error::invalid_value(
-                        de::Unexpected::Str(&s),
+                        de::Unexpected::Str(s),
                         &self,
                     )),
                 }
@@ -441,7 +438,7 @@ impl<'de> de::Deserialize<'de> for Time {
                 match s.parse::<Time>() {
                     Ok(time) => Ok(time),
                     Err(_) => Err(de::Error::invalid_value(
-                        de::Unexpected::Str(&s),
+                        de::Unexpected::Str(s),
                         &self,
                     )),
                 }
