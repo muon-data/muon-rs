@@ -894,14 +894,14 @@ string_c:=first item
                     "sixth",
                 ],
             })?,
-            "num: 15\ntext_list:=first item\n         : second third\n         :=fourth item\n         : fifth\n         :>item\n         : sixth\n"
+            "num: 15\ntext_list:=first item\n         : second third\n         :=fourth item\n         : fifth\n         :>item\n         : sixth\n",
         );
         assert_eq!(
             to_string(&D {
                 num: 12,
                 text_list: vec![],
             })?,
-            "num: 12\n"
+            "num: 12\n",
         );
         Ok(())
     }
@@ -926,7 +926,7 @@ string_c:=first item
         };
         assert_eq!(
             to_string(&s)?,
-            "struct_e: false\nstruct_e: false\nstruct_e: true\nstruct_e: false\n"
+            "struct_e: false\nstruct_e: false\nstruct_e: true\nstruct_e: false\n",
         );
         Ok(())
     }
@@ -943,14 +943,14 @@ string_c:=first item
                 option_a: None,
                 option_b: Some(37),
             })?,
-            "option_b: 37\n"
+            "option_b: 37\n",
         );
         assert_eq!(
             to_string(&G {
                 option_a: Some(false),
                 option_b: None,
             })?,
-            "option_a: false\n"
+            "option_a: false\n",
         );
         Ok(())
     }
@@ -967,7 +967,7 @@ string_c:=first item
                 name: E { flag: true },
                 other: 15,
             })?,
-            "name: true\nother: 15\n"
+            "name: true\nother: 15\n",
         );
         Ok(())
     }
@@ -982,18 +982,18 @@ string_c:=first item
         assert_eq!(
             to_string(&R {
                 name: S {
-                    label: Some(String::from("A label"))
+                    label: Some(String::from("A label")),
                 },
                 other: 15,
             })?,
-            "name:\n  label: A label\nother: 15\n"
+            "name:\n  label: A label\nother: 15\n",
         );
         assert_eq!(
             to_string(&R {
                 name: S { label: None },
                 other: 25,
             })?,
-            "name:\nother: 25\n"
+            "name:\nother: 25\n",
         );
         Ok(())
     }
@@ -1013,10 +1013,10 @@ string_c:=first item
             to_string(&T {
                 name: String::from("Your Name"),
                 other: Some(S {
-                    label: Some(String::from("My Name"))
-                }),
+                    label: Some(String::from("My Name")),
+                })
             })?,
-            "name: Your Name\nother:\n  label: My Name\n"
+            "name: Your Name\nother:\n  label: My Name\n",
         );
         Ok(())
     }
@@ -1037,7 +1037,7 @@ string_c:=first item
                     G { option_a: None, option_b: None },
                 ],
             })?,
-            "list_g:\nlist_g:\n  option_b: 55\nlist_g:\n  option_a: true\nlist_g:\n  option_a: false\n  option_b: 99\nlist_g:\n"
+            "list_g:\nlist_g:\n  option_b: 55\nlist_g:\n  option_a: true\nlist_g:\n  option_a: false\n  option_b: 99\nlist_g:\n",
         );
         Ok(())
     }
@@ -1062,23 +1062,23 @@ string_c:=first item
                 list_j: vec![
                     J {
                         option_a: Some(99),
-                        option_b: vec![I { txt: "test".to_string() }]
+                        option_b: vec![I { txt: "test".to_string() }],
                     },
                     J {
                         option_a: None,
-                        option_b: vec![I { txt: "abc".to_string() }]
+                        option_b: vec![I { txt: "abc".to_string() }],
                     },
                     J {
                         option_a: Some(77),
-                        option_b: vec![I { txt: "xyz".to_string() }]
+                        option_b: vec![I { txt: "xyz".to_string() }],
                     },
                     J {
                         option_a: None,
-                        option_b: vec![]
+                        option_b: vec![],
                     },
                 ],
             })?,
-            "list_j:\n  option_a: 99\n  option_b: test\nlist_j:\n  option_b: abc\nlist_j:\n  option_a: 77\n  option_b: xyz\nlist_j:\n"
+            "list_j:\n  option_a: 99\n  option_b: test\nlist_j:\n  option_b: abc\nlist_j:\n  option_a: 77\n  option_b: xyz\nlist_j:\n",
         );
         Ok(())
     }
@@ -1103,7 +1103,7 @@ string_c:=first item
                     ],
                 }
             })?,
-            "record_l:\n  list_i: abc\n  list_i: def\n  list_i: ghi\n  list_i: xyz\n"
+            "record_l:\n  list_i: abc\n  list_i: def\n  list_i: ghi\n  list_i: xyz\n",
         );
         Ok(())
     }
@@ -1124,7 +1124,7 @@ string_c:=first item
             .map_err(Error::FailedParse)?;
         assert_eq!(
             to_string(&N { name: "one day".to_string(), date, time, datetime })?,
-            "name: one day\ndate: 2019-08-07\ntime: 12:34:56.789\ndatetime: 1999-12-31T23:59:59.999-00:00\n"
+            "name: one day\ndate: 2019-08-07\ntime: 12:34:56.789\ndatetime: 1999-12-31T23:59:59.999-00:00\n",
         );
         Ok(())
     }
@@ -1135,7 +1135,7 @@ string_c:=first item
         m.insert("\"quoted\" key".to_string(), "\"quoted\" value".to_string());
         assert_eq!(
             to_string(&m)?,
-            "\"\"\"quoted\"\" key\": \"quoted\" value\n"
+            "\"\"\"quoted\"\" key\": \"quoted\" value\n",
         );
 
         let mut m = HashMap::new();
