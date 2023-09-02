@@ -2,7 +2,11 @@
 //
 // Copyright (c) 2019-2020  Douglas Lau
 //
+use std::borrow::Cow;
+use std::ops::Neg;
 use std::str::FromStr;
+
+const SIGNS: &[char] = &['-', '+'];
 
 /// Integer trait
 pub trait Integer: FromStr {
@@ -24,7 +28,7 @@ macro_rules! impl_integer {
 impl_integer!(i8 i16 i32 i64 i128 isize u8 u16 u32 u64 u128 usize);
 
 /// Number trait
-pub trait Number: FromStr + std::ops::Neg<Output = Self> {
+pub trait Number: FromStr + Neg<Output = Self> {
     const INFINITY: Self;
     const NEG_INFINITY: Self;
 
@@ -60,62 +64,61 @@ pub enum Sign {
 
 /// Parse an integer from a string slice
 pub fn int<T: Integer>(v: &str) -> Option<T> {
-    v.parse().ok().or_else(|| int_fallback(v))
+    if let Some(binary) = v.strip_prefix('b') {
+        int_radix(binary, 2)
+    } else if let Some(hexadecimal) = v.strip_prefix('x') {
+        int_radix(hexadecimal, 16)
+    } else {
+        sanitize_num(v, 10)?.parse().ok()
+    }
 }
 
-/// Fallback for integer parsing
-fn int_fallback<T: Integer>(v: &str) -> Option<T> {
-    if let Some(binary) = v.strip_prefix('b') {
-        T::from_str_radix(&sanitize_num(binary, 2), 2)
-    } else if let Some(hexadecimal) = v.strip_prefix('x') {
-        T::from_str_radix(&sanitize_num(hexadecimal, 16), 16)
-    } else {
-        sanitize_num(v, 10).parse().ok()
-    }
+/// Parse an integer in an alternative radix
+fn int_radix<T: Integer>(v: &str, radix: u32) -> Option<T> {
+    // Do not allow signs in alternative radices
+    (!v.starts_with(SIGNS)).then_some(())?;
+    T::from_str_radix(&sanitize_num(v, radix)?, radix)
 }
 
 /// Parse a number from a string slice
 pub fn number<T: Number>(v: &str) -> Option<T> {
-    let (v, sign) = if let Some(v) = v.strip_prefix('-') {
-        (v, Sign::Negative)
-    } else {
-        (v.strip_prefix('+').unwrap_or(v), Sign::Positive)
+    let (v, sign) = extract_sign(v);
+    let first = match (v, sign) {
+        ("inf", Sign::Negative) => return Some(T::NEG_INFINITY),
+        ("inf", Sign::Positive) => return Some(T::INFINITY),
+        ("NaN", sign) => return Some(T::nan(sign)),
+        _ => v.chars().next()?,
     };
-    let first = 'value: {
-        return Some(match (v, sign) {
-            ("inf", Sign::Negative) => T::NEG_INFINITY,
-            ("inf", Sign::Positive) => T::INFINITY,
-            ("NaN", sign) => T::nan(sign),
-            _ => break 'value v.chars().next()?,
-        });
-    };
-
+    // Check validity, sanitize, parse, and reïntroduce the sign
     (first.is_ascii_digit() || first == '.')
-        .then(|| v.parse().ok().or_else(|| sanitize_num(v, 10).parse().ok()))?
+        .then(|| sanitize_num(v, 10)?.parse().ok())?
         .map(|v: T| if sign == Sign::Negative { -v } else { v })
 }
 
-/// Sanitize a number, removing valid underscores
-fn sanitize_num(value: &str, radix: u32) -> String {
-    let mut val = String::with_capacity(value.len());
-    for v in value.split('_') {
-        // Check character before underscore is a decimal digit
-        if let Some(before) = val.as_bytes().last() {
-            if !char::from(*before).is_digit(radix) {
-                val.push('_')
-            }
-        }
-        // Check character after underscore is a decimal digit
-        if let Some(after) = v.as_bytes().first() {
-            if *after != b'-' && !char::from(*after).is_digit(radix) {
-                val.push('_')
-            }
-        } else {
-            val.push('_')
-        }
-        val.push_str(v);
+/// Return the number literal with the sign separated out
+fn extract_sign(v: &str) -> (&str, Sign) {
+    if let Some(v) = v.strip_prefix('-') {
+        (v, Sign::Negative)
+    } else {
+        (v.strip_prefix('+').unwrap_or(v), Sign::Positive)
     }
-    val
+}
+
+/// Sanitize a number, removing underscores, returning None if invalid placement
+fn sanitize_num(value: &str, radix: u32) -> Option<Cow<'_, str>> {
+    // If no underscores, return as-is, avoiding allocations
+    if !value.contains('_') {
+        return Some(value.into());
+    }
+    // Without the sign, if it exists, check for valid underscore placement
+    for section in value.strip_prefix(SIGNS).unwrap_or(value).split('_') {
+        // Characters surrounding `_` must be a digit in specified radix
+        (section.chars().next()?.is_digit(radix)
+            && section.chars().last()?.is_digit(radix))
+        .then_some(())?;
+    }
+    // Strip out underscores
+    Some(value.replace('_', "").into())
 }
 
 #[cfg(test)]
@@ -154,6 +157,10 @@ mod test {
         assert_eq!(int::<i32>("0b0000_"), None);
         assert_eq!(int::<i32>("0b0000__0000"), None);
         assert_eq!(int::<i32>("0xBEEF"), None);
+        assert_eq!(int::<i32>("x-1Ac"), None);
+        assert_eq!(int::<i32>("x+1Ac"), None);
+        assert_eq!(int::<i32>("b-101010"), None);
+        assert_eq!(int::<i32>("b+101010"), None);
     }
 
     #[test]
@@ -179,9 +186,15 @@ mod test {
         assert_eq!(number::<f64>("INF"), None);
         assert_eq!(number::<f64>("nan"), None);
         assert_eq!(number::<f64>("nAn"), None);
+        assert_eq!(number::<f32>("++0.123456"), None);
+        assert_eq!(number::<f32>("+-0.123456"), None);
+        assert_eq!(number::<f32>("-+0.123456"), None);
+        assert_eq!(number::<f32>("--0.123456"), None);
         assert!(number::<f32>("NaN").unwrap().is_nan());
         assert!(number::<f32>("-NaN").unwrap().is_nan());
+        assert!(number::<f32>("+NaN").unwrap().is_nan());
         assert!(number::<f32>("NaN").unwrap().is_sign_positive());
         assert!(number::<f32>("-NaN").unwrap().is_sign_negative());
+        assert!(number::<f32>("+NaN").unwrap().is_sign_positive());
     }
 }
