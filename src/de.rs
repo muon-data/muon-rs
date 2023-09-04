@@ -10,16 +10,9 @@ use serde::de::{
     self, Deserialize, DeserializeOwned, DeserializeSeed, MapAccess, SeqAccess,
     Visitor,
 };
+use std::borrow::Cow;
 use std::io::Read;
 use std::str;
-
-/// Parsed text value
-enum TextVal<'de> {
-    /// Owned text value
-    Owned(String),
-    /// Borrowed text value
-    Borrowed(&'de str),
-}
 
 /// Branch state
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -68,10 +61,7 @@ impl<'a> Branch<'a> {
 
     /// Get first field
     fn first_field(&self) -> Option<&'a str> {
-        match self.fields.first() {
-            Some(field) => Some(*field),
-            _ => None,
-        }
+        self.fields.first().copied()
     }
 
     /// Visit one field
@@ -457,60 +447,58 @@ impl<'de> Deserializer<'de> {
     }
 
     /// Parse a text value
-    fn parse_text(&mut self) -> Result<TextVal<'de>> {
-        let val = self.get_value()?;
-        if self.mappings.is_text_append()? {
-            let mut value = val.to_string();
-            while self.mappings.is_text_append()? {
-                value.push('\n');
-                value.push_str(self.get_value()?);
-            }
-            Ok(TextVal::Owned(value))
+    fn parse_text(&mut self) -> Result<Cow<'de, str>> {
+        let mut val = self.get_value()?;
+        let mut value = String::new();
+        // Allocate a buffer if multiple lines of text
+        while self.mappings.is_text_append()? {
+            value.push_str(val);
+            value.push('\n');
+            val = self.get_value()?;
+        }
+        if value.is_empty() {
+            Ok(Cow::Borrowed(val))
         } else {
-            Ok(TextVal::Borrowed(val))
+            value.push_str(val);
+            Ok(Cow::Owned(value))
         }
     }
 
-    /// Parse a char value
+    /// Parse a char (`text <=1 >=1`) value
     fn parse_char(&mut self) -> Result<char> {
-        let text = self.get_value()?;
-        let mut chars = text.chars();
-        if let Some(c) = chars.next() {
-            if chars.next().is_none() {
-                return Ok(c);
-            }
+        let val = self.get_value()?;
+        // Check if char is newline
+        if self.mappings.is_text_append()? && val.is_empty() {
+            let val = self.get_value()?;
+            // Make sure no more newlines and line is empty
+            (!self.mappings.is_text_append()? && val.is_empty())
+                .then_some(())
+                .ok_or(Error::FailedParse(ParseError::ExpectedChar))?;
+            return Ok('\n');
         }
-        Err(Error::FailedParse(ParseError::ExpectedChar))
+        // Don't allow more than one line if not newline
+        (!self.mappings.is_text_append()?)
+            .then_some(())
+            .ok_or(Error::FailedParse(ParseError::ExpectedChar))?;
+        parse::char(val).ok_or(Error::FailedParse(ParseError::ExpectedChar))
     }
 
     /// Parse a bool value
     fn parse_bool(&mut self) -> Result<bool> {
-        let value = self.get_value()?;
-        match value {
-            "true" => Ok(true),
-            "false" => Ok(false),
-            _ => Err(Error::FailedParse(ParseError::ExpectedBool)),
-        }
+        parse::bool(self.get_value()?)
+            .ok_or(Error::FailedParse(ParseError::ExpectedBool))
     }
 
     /// Parse an int value
     fn parse_int<T: Integer>(&mut self) -> Result<T> {
-        let value = self.get_value()?;
-        if let Some(v) = parse::int(value) {
-            Ok(v)
-        } else {
-            Err(Error::FailedParse(ParseError::ExpectedInt))
-        }
+        parse::int(self.get_value()?)
+            .ok_or(Error::FailedParse(ParseError::ExpectedInt))
     }
 
     /// Parse a number value
     fn parse_number<T: Number>(&mut self) -> Result<T> {
-        let value = self.get_value()?;
-        if let Some(v) = parse::number(value) {
-            Ok(v)
-        } else {
-            Err(Error::FailedParse(ParseError::ExpectedNumber))
-        }
+        parse::number(self.get_value()?)
+            .ok_or(Error::FailedParse(ParseError::ExpectedNumber))
     }
 }
 
@@ -630,8 +618,8 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
             return Err(Error::FailedParse(ParseError::MissingField));
         }
         match self.parse_text()? {
-            TextVal::Owned(val) => visitor.visit_string(val),
-            TextVal::Borrowed(val) => visitor.visit_str(val),
+            Cow::Owned(val) => visitor.visit_string(val),
+            Cow::Borrowed(val) => visitor.visit_str(val),
         }
     }
 
@@ -736,6 +724,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
+        self.mappings.next();
         self.mappings.push_stack(Branch::new());
         visitor.visit_map(self)
     }
@@ -961,24 +950,44 @@ mod test {
         Ok(())
     }
 
-    #[derive(Deserialize, PartialEq, Debug)]
-    struct G {
-        string: String,
+    #[test]
+    fn char_append() -> Result<(), Box<Error>> {
+        #[derive(Deserialize, PartialEq, Debug)]
+        struct Data {
+            char: char,
+        }
+
+        let data = "char: ç\n";
+        let expected = Data { char: 'ç' };
+        assert_eq!(expected, from_str(data)?);
+        let data = "char:\n    :>\n";
+        let expected = Data { char: '\n' };
+        assert_eq!(expected, from_str(data)?);
+        let data = "char: ç\n    :>append some junk\n";
+        match from_str::<Data>(data).unwrap_err() {
+            Error::FailedParse(ParseError::ExpectedChar) => Ok(()),
+            r => panic!("bad result: {r:?}"),
+        }
     }
 
     #[test]
     fn text_append() -> Result<(), Box<Error>> {
-        let g = "string: This is a long string\n      :>for testing\n      :>append definitions\n";
-        let expected = G {
+        #[derive(Deserialize, PartialEq, Debug)]
+        struct Data {
+            string: String,
+        }
+
+        let data = "string: This is a long string\n      :>for testing\n      \
+                    :>append definitions\n";
+        let expected = Data {
             string: "This is a long string\nfor testing\nappend definitions"
                 .to_string(),
         };
-        assert_eq!(expected, from_str(g)?);
-        match from_str::<G>("string: test\njunk: stuff\n") {
-            Err(Error::FailedParse(ParseError::UnexpectedKey)) => (),
-            r => panic!("bad result {:?}", r),
+        assert_eq!(expected, from_str(data)?);
+        match from_str::<Data>("string: test\njunk: stuff\n").unwrap_err() {
+            Error::FailedParse(ParseError::UnexpectedKey) => Ok(()),
+            r => panic!("bad result: {r:?}"),
         }
-        Ok(())
     }
 
     #[derive(Debug, Deserialize, PartialEq)]
@@ -1212,7 +1221,6 @@ mod test {
         dict: HashMap<String, String>,
     }
     #[test]
-    #[ignore] // FIXME
     fn hashmap_dict() -> Result<(), Box<Error>> {
         let mut v = V {
             dict: HashMap::new(),
