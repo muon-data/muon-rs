@@ -121,6 +121,16 @@ fn sanitize_num(value: &str, radix: u32) -> Option<Cow<'_, str>> {
     Some(value.replace('_', "").into())
 }
 
+/// Parse a bool from a string slice
+pub fn bool(value: &str) -> Option<bool> {
+    value.parse().ok()
+}
+
+/// Parse a char (`text <=1 >=1`) from a string slice
+pub fn char(value: &str) -> Option<char> {
+    value.parse().ok()
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -196,5 +206,23 @@ mod test {
         assert!(number::<f32>("NaN").unwrap().is_sign_positive());
         assert!(number::<f32>("-NaN").unwrap().is_sign_negative());
         assert!(number::<f32>("+NaN").unwrap().is_sign_positive());
+    }
+
+    #[test]
+    fn bools() {
+        assert_eq!(bool("true"), Some(true));
+        assert_eq!(bool("false"), Some(false));
+        assert_eq!(bool("True"), None);
+        assert_eq!(bool("False"), None);
+        assert_eq!(bool("TRUE"), None);
+        assert_eq!(bool("FALSE"), None);
+    }
+
+    #[test]
+    fn chars() {
+        assert_eq!(char(""), None);
+        assert_eq!(char("aa"), None);
+        assert_eq!(char("a"), Some('a'));
+        assert_eq!(char("\0"), Some('\0'));
     }
 }
