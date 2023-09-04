@@ -90,75 +90,88 @@ struct ValueVisitor;
 
 impl<'de> Visitor<'de> for ValueVisitor {
     type Value = Value;
+
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         write!(formatter, "a MuON value")
     }
+
     fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E>
     where
         E: serde::de::Error,
     {
         Ok(Value::Bool(v))
     }
+
     fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
     where
         E: serde::de::Error,
     {
         Ok(Value::Int(IntValue::Signed(v.into())))
     }
+
     fn visit_i128<E>(self, v: i128) -> Result<Self::Value, E>
     where
         E: serde::de::Error,
     {
         Ok(Value::Int(IntValue::Signed(v)))
     }
+
     fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
     where
         E: serde::de::Error,
     {
         Ok(Value::Int(IntValue::Unsigned(v.into())))
     }
+
     fn visit_u128<E>(self, v: u128) -> Result<Self::Value, E>
     where
         E: serde::de::Error,
     {
         Ok(Value::Int(IntValue::Unsigned(v)))
     }
+
     fn visit_f32<E>(self, v: f32) -> Result<Self::Value, E>
     where
         E: serde::de::Error,
     {
         Ok(Value::Number(NumValue::Num32(v)))
     }
+
     fn visit_f64<E>(self, v: f64) -> Result<Self::Value, E>
     where
         E: serde::de::Error,
     {
         Ok(Value::Number(NumValue::Num64(v)))
     }
+
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
     where
         E: serde::de::Error,
     {
         Ok(Value::Text(v.into()))
     }
+
     fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
     where
         E: serde::de::Error,
     {
         Ok(Value::Text(v.into()))
     }
+
     fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
     where
         E: serde::de::Error,
     {
         Ok(Value::Text(v))
     }
+
     fn visit_none<E>(self) -> Result<Self::Value, E>
     where
         E: serde::de::Error,
     {
         Ok(Value::Optional(None))
     }
+
     fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
         D: Deserializer<'de>,
@@ -207,27 +220,26 @@ pub struct Node<'a> {
 /// Schema Type
 #[derive(Debug)]
 pub enum Type {
-    /// Text is a `String`
+    /// Text is a [`String`]
     Text,
-    /// Boolean is a `bool`
+    /// Boolean is a [`bool`]
     Bool,
     /// Integer is a signed or unsigned int
     Int,
-    /// Number parses into `f64` or `f32`
+    /// Number parses into [`f64`] or [`f32`]
     Number,
-    /// Date-time parses into [DateTime](struct.DateTime.html)
+    /// Date-time parses into [`DateTime`]
     DateTime,
-    /// Date parses into [Date](struct.Date.html)
+    /// Date parses into [`Date`]
     Date,
-    /// Time parses into [Time](struct.Time.html)
+    /// Time parses into [`Time`]
     Time,
-    /// Record parses into a struct or
-    /// [Value::Record](enum.Value.html#variant.Record)
+    /// Record parses into a struct or [`Value::Record`]
     Record,
-    /// Dictionary parses into [HashMap](struct.HashMap.html) or
-    /// [Value::Dictionary](enum.Value.html#variant.Dictionary)
+    /// Dictionary parses into [`HashMap`](std::collections::HashMap) or
+    /// [`Value::Dictionary`]
     Dictionary,
-    /// Any parses into [Value::Any](enum.Value.html#variant.Any)
+    /// Any parses into [`Value::Any`]
     Any,
 }
 
@@ -260,19 +272,19 @@ impl FromStr for Type {
     type Err = ParseError;
 
     fn from_str(val: &str) -> Result<Self, Self::Err> {
-        match val {
-            "text" => Ok(Type::Text),
-            "bool" => Ok(Type::Bool),
-            "int" => Ok(Type::Int),
-            "number" => Ok(Type::Number),
-            "datetime" => Ok(Type::DateTime),
-            "date" => Ok(Type::Date),
-            "time" => Ok(Type::Time),
-            "record" => Ok(Type::Record),
-            "dictionary" => Ok(Type::Dictionary),
-            "any" => Ok(Type::Any),
-            _ => Err(ParseError::InvalidType),
-        }
+        Ok(match val {
+            "text" => Type::Text,
+            "bool" => Type::Bool,
+            "int" => Type::Int,
+            "number" => Type::Number,
+            "datetime" => Type::DateTime,
+            "date" => Type::Date,
+            "time" => Type::Time,
+            "record" => Type::Record,
+            "dictionary" => Type::Dictionary,
+            "any" => Type::Any,
+            _ => return Err(ParseError::InvalidType),
+        })
     }
 }
 
@@ -283,16 +295,16 @@ impl Type {
         modifier: &Option<Modifier>,
         v: &str,
     ) -> Result<Value, ParseError> {
-        match (modifier, self) {
-            (None, Type::Text) => Ok(Value::Text(String::from(v))),
-            (None, Type::Bool) => Ok(Value::Bool(v.parse()?)),
-            (None, Type::Int) => Ok(Value::Int(v.parse()?)),
-            (None, Type::Number) => Ok(Value::Number(v.parse()?)),
-            (None, Type::DateTime) => Ok(Value::DateTime(v.parse()?)),
-            (None, Type::Date) => Ok(Value::Date(v.parse()?)),
-            (None, Type::Time) => Ok(Value::Time(v.parse()?)),
-            _ => Err(ParseError::InvalidDefault),
-        }
+        Ok(match (modifier, self) {
+            (None, Type::Text) => Value::Text(String::from(v)),
+            (None, Type::Bool) => Value::Bool(v.parse()?),
+            (None, Type::Int) => Value::Int(v.parse()?),
+            (None, Type::Number) => Value::Number(v.parse()?),
+            (None, Type::DateTime) => Value::DateTime(v.parse()?),
+            (None, Type::Date) => Value::Date(v.parse()?),
+            (None, Type::Time) => Value::Time(v.parse()?),
+            _ => return Err(ParseError::InvalidDefault),
+        })
     }
 }
 
@@ -341,39 +353,37 @@ impl<'a> Node<'a> {
 
 impl<'a> Schema<'a> {
     /// Create a new schema
-    pub fn new() -> Self {
-        let nodes = vec![];
+    pub(crate) fn new() -> Self {
+        let nodes = Vec::new();
         let finished = false;
         Schema { nodes, finished }
     }
 
     /// Add node
     fn add_node(&mut self, node: Node<'a>) -> Result<(), ParseError> {
-        if node.is_indent_valid(self.nodes.last()) {
-            self.nodes.push(node);
-            Ok(())
-        } else {
-            Err(ParseError::InvalidIndent)
-        }
+        node.is_indent_valid(self.nodes.last())
+            .then_some(())
+            .ok_or(ParseError::InvalidIndent)?;
+        self.nodes.push(node);
+        Ok(())
     }
 
     /// Add a define
-    pub fn add_define(&mut self, def: Define<'a>) -> Result<bool, ParseError> {
-        if self.finished {
-            Ok(false)
-        } else {
+    pub(crate) fn add_define(
+        &mut self,
+        def: Define<'a>,
+    ) -> Result<bool, ParseError> {
+        let not_finished = !self.finished;
+        if not_finished {
             self.add_node(Node::from_define(def)?)?;
-            Ok(true)
         }
+        Ok(not_finished)
     }
 
     /// Finish the schema
-    pub fn finish(&mut self) -> bool {
-        if self.finished {
-            true
-        } else {
-            self.finished = true;
-            false
-        }
+    pub(crate) fn finish(&mut self) -> bool {
+        let finished = self.finished;
+        self.finished = true;
+        finished
     }
 }

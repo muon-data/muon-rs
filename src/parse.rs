@@ -9,7 +9,7 @@ use std::str::FromStr;
 const SIGNS: &[char] = &['-', '+'];
 
 /// Integer trait
-pub trait Integer: FromStr {
+pub(crate) trait Integer: FromStr {
     fn from_str_radix(src: &str, radix: u32) -> Option<Self>;
 }
 
@@ -28,7 +28,7 @@ macro_rules! impl_integer {
 impl_integer!(i8 i16 i32 i64 i128 isize u8 u16 u32 u64 u128 usize);
 
 /// Number trait
-pub trait Number: FromStr + Neg<Output = Self> {
+pub(crate) trait Number: FromStr + Neg<Output = Self> {
     const INFINITY: Self;
     const NEG_INFINITY: Self;
 
@@ -57,13 +57,13 @@ macro_rules! impl_number {
 impl_number!((f32, u32, 31), (f64, u64, 63));
 
 #[derive(Copy, Clone, PartialEq, Eq)]
-pub enum Sign {
+pub(crate) enum Sign {
     Negative,
     Positive,
 }
 
 /// Parse an integer from a string slice
-pub fn int<T: Integer>(v: &str) -> Option<T> {
+pub(crate) fn int<T: Integer>(v: &str) -> Option<T> {
     if let Some(binary) = v.strip_prefix('b') {
         int_radix(binary, 2)
     } else if let Some(hexadecimal) = v.strip_prefix('x') {
@@ -81,7 +81,7 @@ fn int_radix<T: Integer>(v: &str, radix: u32) -> Option<T> {
 }
 
 /// Parse a number from a string slice
-pub fn number<T: Number>(v: &str) -> Option<T> {
+pub(crate) fn number<T: Number>(v: &str) -> Option<T> {
     let (v, sign) = extract_sign(v);
     let first = match (v, sign) {
         ("inf", Sign::Negative) => return Some(T::NEG_INFINITY),
@@ -122,12 +122,12 @@ fn sanitize_num(value: &str, radix: u32) -> Option<Cow<'_, str>> {
 }
 
 /// Parse a bool from a string slice
-pub fn bool(value: &str) -> Option<bool> {
+pub(crate) fn bool(value: &str) -> Option<bool> {
     value.parse().ok()
 }
 
 /// Parse a char (`text <=1 >=1`) from a string slice
-pub fn char(value: &str) -> Option<char> {
+pub(crate) fn char(value: &str) -> Option<char> {
     value.parse().ok()
 }
 

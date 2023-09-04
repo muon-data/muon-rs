@@ -28,7 +28,7 @@ enum State {
 
 /// Line Types
 #[derive(Debug, PartialEq)]
-pub enum Line<'a> {
+pub(crate) enum Line<'a> {
     /// Schema separator (:::)
     SchemaSeparator,
     /// Blank line
@@ -41,10 +41,9 @@ pub enum Line<'a> {
 
 /// Iterator for lines
 ///
-/// If a parsing error happens, the [next](struct.LineIter.html#method.next)
-/// method will return `None`.  Use [error](struct.LineIter.html#method.error)
-/// to check for this.
-pub struct LineIter<'a> {
+/// If a parsing error happens, the [`LineIter::next()`] method will return
+/// `None`.  Use [`LineIter::error()`] to check for this.
+pub(crate) struct LineIter<'a> {
     /// Input string
     input: &'a str,
     /// Parsing error
@@ -53,10 +52,9 @@ pub struct LineIter<'a> {
 
 /// Iterator for definitions
 ///
-/// If a parsing error happens, the [next](struct.DefIter.html#method.next)
-/// method will return `None`.  Use [error](struct.DefIter.html#method.error)
-/// to check for this.
-pub struct DefIter<'a> {
+/// If a parsing error happens, the [`DefIter::next()`] method will return
+/// `None`.  Use [`DefIter::error()`] to check for this.
+pub(crate) struct DefIter<'a> {
     /// Line iterator
     lines: LineIter<'a>,
     /// Number of spaces in one indent
@@ -72,8 +70,8 @@ pub struct DefIter<'a> {
 impl State {
     /// Parse one character
     ///
-    /// `offset` Byte offset for character
-    /// `c` Character to parse
+    ///  - `offset` Byte offset for character
+    ///  - `c` Character to parse
     fn parse_char(self, offset: usize, c: char) -> Self {
         use State::*;
         match self {
@@ -154,12 +152,12 @@ impl<'a> Line<'a> {
 
 impl<'a> LineIter<'a> {
     /// Create a new line iterator
-    pub fn new(input: &'a str) -> Self {
+    pub(crate) fn new(input: &'a str) -> Self {
         LineIter { input, error: None }
     }
 
     /// Get most recent parse error
-    pub fn error(&self) -> Option<ParseError> {
+    pub(crate) fn error(&self) -> Option<ParseError> {
         self.error
     }
 }
@@ -204,7 +202,7 @@ fn key_indent(key: &str) -> Option<usize> {
 
 impl<'a> DefIter<'a> {
     /// Create a new definition iterator
-    pub fn new(input: &'a str) -> Self {
+    pub(crate) fn new(input: &'a str) -> Self {
         let lines = LineIter::new(input);
         let indent_spaces = None;
         let schema = None;
@@ -221,12 +219,12 @@ impl<'a> DefIter<'a> {
 
     /// Get schema
     #[allow(dead_code)]
-    pub fn schema(&self) -> Option<&Schema> {
+    pub(crate) fn schema(&self) -> Option<&Schema> {
         self.schema.as_ref()
     }
 
     /// Get most recent parse error
-    pub fn error(&self) -> Option<ParseError> {
+    pub(crate) fn error(&self) -> Option<ParseError> {
         self.error
     }
 
