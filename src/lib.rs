@@ -14,8 +14,6 @@
 //! The easiest way to deserialize data is to derive [`serde::Deserialize`] on
 //! a struct.  Then use one of the [`from_`](index.html#functions) functions.
 //!
-//! [`serde::Deserialize`]: https://docs.serde.rs/serde/trait.Deserialize.html
-//!
 //! ### Example
 //!
 //! MuON file:
@@ -71,8 +69,6 @@
 //! Deriving [`serde::Serialize`] on a struct is just as easy.  The
 //! [`to_`](index.html#functions) functions are used to serialize MuON data.
 //!
-//! [`serde::Serialize`]: https://docs.serde.rs/serde/trait.Serialize.html
-//!
 //! ### Example
 //!
 //! ```rust
@@ -124,75 +120,23 @@
 //!
 //! MuON types can be mapped to different Rust types.
 //!
-//! <table>
-//!   <tr>
-//!     <th>MuON Type</th>
-//!     <th>Rust Types</th>
-//!   </tr>
-//!   <tr>
-//!     <td>text</td>
-//!     <td><a href="https://doc.rust-lang.org/std/string/struct.String.html">
-//!         String</a>
-//!     </td>
-//!   </tr>
-//!   <tr>
-//!     <td>bool</td>
-//!     <td><a href="https://doc.rust-lang.org/std/primitive.bool.html">bool</a>
-//!     </td>
-//!   </tr>
-//!   <tr>
-//!     <td>int</td>
-//!     <td><a href="https://doc.rust-lang.org/std/primitive.i8.html">i8</a>
-//!        <a href="https://doc.rust-lang.org/std/primitive.i16.html">i16</a>
-//!        <a href="https://doc.rust-lang.org/std/primitive.i32.html">i32</a>
-//!        <a href="https://doc.rust-lang.org/std/primitive.i64.html">i64</a>
-//!        <a href="https://doc.rust-lang.org/std/primitive.i128.html">i128</a>
-//!        <a href="https://doc.rust-lang.org/std/primitive.isize.html">isize</a>
-//!        <a href="https://doc.rust-lang.org/std/primitive.u8.html">u8</a>
-//!        <a href="https://doc.rust-lang.org/std/primitive.u16.html">u16</a>
-//!        <a href="https://doc.rust-lang.org/std/primitive.u32.html">u32</a>
-//!        <a href="https://doc.rust-lang.org/std/primitive.u64.html">u64</a>
-//!        <a href="https://doc.rust-lang.org/std/primitive.u128.html">u128</a>
-//!        <a href="https://doc.rust-lang.org/std/primitive.usize.html">usize</a>
-//!     </td>
-//!   </tr>
-//!   <tr>
-//!     <td>number</td>
-//!     <td><a href="https://doc.rust-lang.org/std/primitive.f32.html">f32</a>
-//!        <a href="https://doc.rust-lang.org/std/primitive.f64.html">f64</a>
-//!     </td>
-//!   </tr>
-//!   <tr>
-//!     <td>datetime</td>
-//!     <td><a href="struct.DateTime.html">DateTime</a></td>
-//!   </tr>
-//!   <tr>
-//!     <td>date</td>
-//!     <td><a href="struct.Date.html">Date</a></td>
-//!   </tr>
-//!   <tr>
-//!     <td>time</td>
-//!     <td><a href="struct.Time.html">Time</a></td>
-//!   </tr>
-//!   <tr>
-//!     <td>record</td>
-//!     <td>struct implementing
-//!         <a href="https://docs.serde.rs/serde/trait.Deserialize.html">
-//!         Deserialize</a>
-//!     </td>
-//!   </tr>
-//!   <tr>
-//!     <td>dictionary</td>
-//!     <td><a href="https://doc.rust-lang.org/std/collections/struct.HashMap.html">
-//!         HashMap</a>
-//!     </td>
-//!   </tr>
-//!   <tr>
-//!     <td>any</td>
-//!     <td><a href="enum.Value.html">Value</a></td>
-//!   </tr>
-//! </table>
+//! | MuON Type      | Rust Types                                              |
+//! |----------------|---------------------------------------------------------|
+//! | `text`         | [`String`]                                              |
+//! | `text <=1 >=1` | [`char`]                                                |
+//! | `bool`         | [`bool`]                                                |
+//! | `int`          | [`i8`] [`i16`] [`i32`] [`i64`] [`i128`] [`isize`] [`u8`] [`u16`] [`u32`] [`u64`] [`u128`] [`usize`] |
+//! | `number`       | [`f32`] [`f64`]                                         |
+//! | `datetime`     | [`DateTime`]                                            |
+//! | `date`         | [`Date`]                                                |
+//! | `time`         | [`Time`]                                                |
+//! | `record`       | struct implementing [`Deserialize`](serde::Deserialize) |
+//! | `dictionary`   | [`HashMap`] [`BTreeMap`]                                |
+//! | `any`          | [`Value`]                                               |
 //!
+//! [`HashMap`]: std::collections::HashMap
+//! [`BTreeMap`]: std::collections::BTreeMap
+
 mod common;
 mod datetime;
 mod de;

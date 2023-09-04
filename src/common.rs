@@ -5,7 +5,7 @@
 
 /// Key / value separator type
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Separator {
+pub(crate) enum Separator {
     /// Normal `: ` separator
     Normal,
     /// Text append `:>` separator
@@ -16,20 +16,20 @@ pub enum Separator {
 
 /// Key / value definition
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Define<'a> {
+pub(crate) struct Define<'a> {
     /// Indent count
-    pub indent: usize,
+    pub(crate) indent: usize,
     /// Key for definition
-    pub key: &'a str,
+    pub(crate) key: &'a str,
     /// Key / value separator
-    pub separator: Separator,
+    pub(crate) separator: Separator,
     /// Value for definition
-    pub value: &'a str,
+    pub(crate) value: &'a str,
 }
 
 impl Separator {
     /// Get the separator as a string slice
-    pub fn as_str(&self) -> &'static str {
+    pub(crate) fn as_str(&self) -> &'static str {
         match self {
             Separator::Normal => ": ",
             Separator::TextAppend => ":>",
@@ -40,7 +40,7 @@ impl Separator {
 
 impl<'a> Define<'a> {
     /// Create a new definition
-    pub fn new(
+    pub(crate) fn new(
         indent: usize,
         key: &'a str,
         separator: Separator,
@@ -55,7 +55,7 @@ impl<'a> Define<'a> {
     }
 
     /// Split a definition for a list
-    pub fn split_list(self) -> (Self, Option<Self>) {
+    pub(crate) fn split_list(self) -> (Self, Option<Self>) {
         let v: Vec<&str> = self.value.splitn(2, ' ').collect();
         if v.len() == 1 {
             (self, None)
@@ -68,7 +68,7 @@ impl<'a> Define<'a> {
     }
 
     /// Check indent nesting
-    pub fn check_indent(&self, indent: usize) -> bool {
+    pub(crate) fn check_indent(&self, indent: usize) -> bool {
         indent == self.indent + 1
     }
 }
