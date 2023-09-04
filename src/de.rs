@@ -818,136 +818,145 @@ mod test {
     use std::collections::HashMap;
 
     #[derive(Deserialize, PartialEq, Debug)]
-    struct A {
-        b: bool,
-        uint: u32,
-        int: i32,
-    }
-
-    #[test]
-    fn integers() -> Result<(), Box<Error>> {
-        let a = "b: false\nuint: 7\nint: -5\n";
-        let expected = A {
-            b: false,
-            uint: 7,
-            int: -5,
-        };
-        assert_eq!(expected, from_str(a)?);
-        let a = "b: true\nuint: xF00D\nint: b1111_0000_1111\n";
-        let expected = A {
-            b: true,
-            uint: 0xF00D,
-            int: 0xF0F,
-        };
-        assert_eq!(expected, from_str(a)?);
-        Ok(())
+    struct Person {
+        name: String,
+        score: i32,
     }
 
     #[derive(Deserialize, PartialEq, Debug)]
-    struct B {
-        flags: Vec<bool>,
-        values: Vec<String>,
-        ints: [i16; 3],
+    struct People {
+        person: Vec<Person>,
     }
 
-    #[test]
-    fn lists() -> Result<(), Box<Error>> {
-        let b =
-            "flags: false true true false\nvalues: Hello World\nints: 1 2 -5\n";
-        let expected = B {
-            flags: vec![false, true, true, false],
-            values: vec!["Hello".to_string(), "World".to_string()],
-            ints: [1, 2, -5],
-        };
-        assert_eq!(expected, from_str(b)?);
-        let b = "flags: true true\nflags: false false\nints: 30 -25 0\n";
-        let expected = B {
-            flags: vec![true, true, false, false],
-            values: vec![],
-            ints: [30, -25, 0],
-        };
-        assert_eq!(expected, from_str(b)?);
-        Ok(())
+    #[derive(Debug, Deserialize, PartialEq)]
+    struct Strings {
+        strings: Vec<String>,
     }
 
     #[derive(Deserialize, PartialEq, Debug)]
-    struct C {
-        float: f32,
-        double: f64,
-    }
-
-    #[test]
-    fn numbers() -> Result<(), Box<Error>> {
-        let c = "float: +3.1415927\ndouble: -123.456789e0\n";
-        let expected = C {
-            float: std::f32::consts::PI,
-            double: -123.456789,
-        };
-        assert_eq!(expected, from_str(c)?);
-        let c = "float: 1e15\ndouble: inf\n";
-        let expected = C {
-            float: 1e15,
-            double: std::f64::INFINITY,
-        };
-        assert_eq!(expected, from_str(c)?);
-        let c = "float: 8_765.432\ndouble: -inf\n";
-        let expected = C {
-            float: 8_765.432,
-            double: std::f64::NEG_INFINITY,
-        };
-        assert_eq!(expected, from_str(c)?);
-        let c = "float: 123_.456\ndouble: 1.0\n";
-        assert!(from_str::<C>(c).is_err());
-        let c = "float: _123.456\ndouble: 1.0\n";
-        assert!(from_str::<C>(c).is_err());
-        let c = "float: 123.456_\ndouble: 1.0\n";
-        assert!(from_str::<C>(c).is_err());
-        let c = "float: 123.456\ndouble: 1__0.0\n";
-        assert!(from_str::<C>(c).is_err());
-        let c = "float: .123_456\ndouble: 1.0\n";
-        assert!(from_str::<C>(c).is_err());
-        Ok(())
-    }
-
-    #[derive(Deserialize, PartialEq, Debug)]
-    struct D {
-        struct_e: E,
-    }
-
-    #[derive(Deserialize, PartialEq, Debug)]
-    struct E {
-        struct_f: F,
-        flag: bool,
-    }
-
-    #[derive(Deserialize, PartialEq, Debug)]
-    struct F {
+    struct Wrapper {
         int: i64,
     }
 
     #[test]
+    fn integers() -> Result<(), Box<Error>> {
+        #[derive(Deserialize, PartialEq, Debug)]
+        struct Data {
+            b: bool,
+            uint: u32,
+            int: i32,
+        }
+
+        let data = "b: false\nuint: 7\nint: -5\n";
+        let expected = Data {
+            b: false,
+            uint: 7,
+            int: -5,
+        };
+        assert_eq!(expected, from_str(data)?);
+        let data = "b: true\nuint: xF00D\nint: b1111_0000_1111\n";
+        let expected = Data {
+            b: true,
+            uint: 0xF00D,
+            int: 0xF0F,
+        };
+        assert_eq!(expected, from_str(data)?);
+        Ok(())
+    }
+
+    #[test]
+    fn lists() -> Result<(), Box<Error>> {
+        #[derive(Deserialize, PartialEq, Debug)]
+        struct Data {
+            flags: Vec<bool>,
+            values: Vec<String>,
+            ints: [i16; 3],
+        }
+
+        let data =
+            "flags: false true true false\nvalues: Hello World\nints: 1 2 -5\n";
+        let expected = Data {
+            flags: [false, true, true, false].to_vec(),
+            values: ["Hello".to_string(), "World".to_string()].to_vec(),
+            ints: [1, 2, -5],
+        };
+        assert_eq!(expected, from_str(data)?);
+        let data = "flags: true true\nflags: false false\nints: 30 -25 0\n";
+        let expected = Data {
+            flags: [true, true, false, false].to_vec(),
+            values: Vec::new(),
+            ints: [30, -25, 0],
+        };
+        assert_eq!(expected, from_str(data)?);
+        Ok(())
+    }
+
+    #[test]
+    fn numbers() -> Result<(), Box<Error>> {
+        #[derive(Deserialize, PartialEq, Debug)]
+        struct Data {
+            float: f32,
+            double: f64,
+        }
+
+        let data = "float: +3.1415927\ndouble: -123.456789e0\n";
+        let expected = Data {
+            float: std::f32::consts::PI,
+            double: -123.456789,
+        };
+        assert_eq!(expected, from_str(data)?);
+        let data = "float: 1e15\ndouble: inf\n";
+        let expected = Data {
+            float: 1e15,
+            double: std::f64::INFINITY,
+        };
+        assert_eq!(expected, from_str(data)?);
+        let data = "float: 8_765.432\ndouble: -inf\n";
+        let expected = Data {
+            float: 8_765.432,
+            double: std::f64::NEG_INFINITY,
+        };
+        assert_eq!(expected, from_str(data)?);
+        let data = "float: 123_.456\ndouble: 1.0\n";
+        assert!(from_str::<Data>(data).is_err());
+        let data = "float: _123.456\ndouble: 1.0\n";
+        assert!(from_str::<Data>(data).is_err());
+        let data = "float: 123.456_\ndouble: 1.0\n";
+        assert!(from_str::<Data>(data).is_err());
+        let data = "float: 123.456\ndouble: 1__0.0\n";
+        assert!(from_str::<Data>(data).is_err());
+        let data = "float: .123_456\ndouble: 1.0\n";
+        assert!(from_str::<Data>(data).is_err());
+        Ok(())
+    }
+
+    #[test]
     fn nesting() -> Result<(), Box<Error>> {
-        let d = D {
-            struct_e: {
-                E {
-                    struct_f: F { int: 321 },
-                    flag: false,
-                }
+        #[derive(Deserialize, PartialEq, Debug)]
+        struct Nested {
+            wrapper: Wrapper,
+            flag: bool,
+        }
+
+        #[derive(Deserialize, PartialEq, Debug)]
+        struct Data {
+            nested: Nested,
+        }
+
+        let expected = Data {
+            nested: Nested {
+                wrapper: Wrapper { int: 321 },
+                flag: false,
             },
         };
-        assert_eq!(
-            d,
-            from_str("struct_e:\n  struct_f:\n    int: 321\n  flag: false\n")?
-        );
-        assert_eq!(
-            d,
-            from_str("struct_e:\n  flag: false\n  struct_f:\n    int: 321\n")?
-        );
-        match from_str::<E>("struct_f: 223344\n  int: 55\n") {
-            Err(Error::Deserialize(_)) => (),
-            r => panic!("bad result {:?}", r),
+        let data = "nested:\n  wrapper:\n    int: 321\n  flag: false\n";
+        assert_eq!(expected, from_str(data)?);
+        let data = "nested:\n  flag: false\n  wrapper:\n    int: 321\n";
+        assert_eq!(expected, from_str(data)?);
+        match from_str::<Nested>("wrapper: 223344\n  int: 55\n").unwrap_err() {
+            Error::Deserialize(_) => Ok(()),
+            r => panic!("bad error {r:?}"),
         }
-        Ok(())
     }
 
     #[test]
@@ -990,245 +999,245 @@ mod test {
         }
     }
 
-    #[derive(Debug, Deserialize, PartialEq)]
-    struct H {
-        strings: Vec<String>,
-    }
-
     #[test]
     fn text_list() -> Result<(), Box<Error>> {
-        let h = "strings: first second third\n       :>item\n       : fourth\n       :=fifth item\n       : sixth\n";
-        assert_eq!(
-            H {
-                strings: vec![
-                    "first".to_string(),
-                    "second".to_string(),
-                    "third\nitem".to_string(),
-                    "fourth".to_string(),
-                    "fifth item".to_string(),
-                    "sixth".to_string(),
-                ],
-            },
-            from_str::<H>(h)?
-        );
+        let data =
+            "strings: first second third\n       :>item\n       : fourth\
+                    \n       :=fifth item\n       : sixth\n";
+        let expected = Strings {
+            strings: Vec::from([
+                "first".to_string(),
+                "second".to_string(),
+                "third\nitem".to_string(),
+                "fourth".to_string(),
+                "fifth item".to_string(),
+                "sixth".to_string(),
+            ]),
+        };
+        assert_eq!(expected, from_str::<Strings>(data)?);
         Ok(())
-    }
-
-    #[derive(Deserialize, PartialEq, Debug)]
-    struct I {
-        flag: Option<bool>,
-        int: Option<i64>,
-        float: Option<f32>,
     }
 
     #[test]
     fn options() -> Result<(), Box<Error>> {
-        let i = "flag: false\n";
-        let expected = I {
+        #[derive(Deserialize, PartialEq, Debug)]
+        struct Data {
+            flag: Option<bool>,
+            int: Option<i64>,
+            float: Option<f32>,
+        }
+
+        let data = "flag: false\n";
+        let expected = Data {
             flag: Some(false),
             int: None,
             float: None,
         };
-        assert_eq!(expected, from_str(i)?);
-        let i = "int: xfab\n";
-        let expected = I {
+        assert_eq!(expected, from_str(data)?);
+        let data = "int: xfab\n";
+        let expected = Data {
             flag: None,
             int: Some(0xFAB),
             float: None,
         };
-        assert_eq!(expected, from_str(i)?);
-        let i = "float: -5e37\n";
-        let expected = I {
+        assert_eq!(expected, from_str(data)?);
+        let data = "float: -5e37\n";
+        let expected = Data {
             flag: None,
             int: None,
             float: Some(-5e37),
         };
-        assert_eq!(expected, from_str(i)?);
+        assert_eq!(expected, from_str(data)?);
         Ok(())
-    }
-
-    #[derive(Deserialize, PartialEq, Debug)]
-    struct J {
-        person: Vec<K>,
-    }
-
-    #[derive(Deserialize, PartialEq, Debug)]
-    struct K {
-        name: String,
-        score: i32,
     }
 
     #[test]
     fn record_list() -> Result<(), Box<Error>> {
-        let j = "person:\n   name: Genghis Khan\n   score: 500\nperson:\n   name: Josef Stalin\n   score: 250\nperson:\n   name: Dudley Do-Right\n   score: 800\n";
-        let expected = J {
-            person: vec![
-                K {
+        let data = "person:\n   name: Genghis Khan\n   score: 500\n\
+                    person:\n   name: Josef Stalin\n   score: 250\n\
+                    person:\n   name: Dudley Do-Right\n   score: 800\n";
+        let expected = People {
+            person: Vec::from([
+                Person {
                     name: "Genghis Khan".to_string(),
                     score: 500,
                 },
-                K {
+                Person {
                     name: "Josef Stalin".to_string(),
                     score: 250,
                 },
-                K {
+                Person {
                     name: "Dudley Do-Right".to_string(),
                     score: 800,
                 },
-            ],
+            ]),
         };
-        assert_eq!(expected, from_str(j)?);
+        assert_eq!(expected, from_str(data)?);
         Ok(())
     }
 
     #[test]
     fn record_bad() -> Result<(), Box<Error>> {
-        let j = "person:\n  score: 500\nperson:\n  name: Josef Stalin\n  score: 250\n";
-        match from_str::<J>(j) {
-            Err(Error::FailedParse(ParseError::MissingField)) => (),
-            r => panic!("bad result {:?}", r),
-        };
-        Ok(())
+        let people = "person:\n  score: 500\n\
+                      person:\n  name: Josef Stalin\n  score: 250\n";
+        match from_str::<People>(people).unwrap_err() {
+            Error::FailedParse(ParseError::MissingField) => Ok(()),
+            r => panic!("bad error {r:?}"),
+        }
     }
 
-    #[derive(Deserialize, PartialEq, Debug)]
-    struct M {
-        name: String,
-        date: Date,
-        time: Time,
-        datetime: DateTime,
-    }
     #[test]
     fn datetime() -> Result<(), Box<Error>> {
+        #[derive(Deserialize, PartialEq, Debug)]
+        struct Data {
+            name: String,
+            date: Date,
+            time: Time,
+            datetime: DateTime,
+        }
+
         let date = "2019-08-07".parse().map_err(Error::FailedParse)?;
         let time = "12:34:56.789".parse().map_err(Error::FailedParse)?;
         let datetime = "1999-12-31T23:59:59.999-00:00"
             .parse()
             .map_err(Error::FailedParse)?;
-        assert_eq!(
-            M { name: "one day".to_string(), date, time, datetime },
-            from_str("name: one day\ndate: 2019-08-07\ntime: 12:34:56.789\ndatetime: 1999-12-31T23:59:59.999-00:00\n")?
-        );
+        let expected = Data {
+            name: "one day".to_string(),
+            date,
+            time,
+            datetime,
+        };
+        let data = "name: one day\n\
+                    date: 2019-08-07\n\
+                    time: 12:34:56.789\n\
+                    datetime: 1999-12-31T23:59:59.999-00:00\n";
+        assert_eq!(expected, from_str(data)?);
         Ok(())
     }
 
     #[test]
     fn record_substitute() -> Result<(), Box<Error>> {
-        assert_eq!(
-            J {
-                person: vec![
-                    K {
-                        name: "Immanuel Kant".to_string(),
-                        score: 600,
-                    },
-                    K {
-                        name: "Arthur Schopenhauer".to_string(),
-                        score: 225,
-                    },
-                    K {
-                        name: "René Descartes".to_string(),
-                        score: 400,
-                    },
-                ],
-            },
-            from_str("person: Immanuel Kant\n  score: 600\nperson: Arthur Schopenhauer\n  score: 225\nperson: René Descartes\n  score: 400\n")?
-        );
+        let people = People {
+            person: Vec::from([
+                Person {
+                    name: "Immanuel Kant".to_string(),
+                    score: 600,
+                },
+                Person {
+                    name: "Arthur Schopenhauer".to_string(),
+                    score: 225,
+                },
+                Person {
+                    name: "René Descartes".to_string(),
+                    score: 400,
+                },
+            ]),
+        };
+        let data = "person: Immanuel Kant\n  score: 600\n\
+                    person: Arthur Schopenhauer\n  score: 225\n\
+                    person: René Descartes\n  score: 400\n";
+        assert_eq!(people, from_str(data)?);
         Ok(())
     }
 
-    #[derive(Deserialize, PartialEq, Debug)]
-    struct N {
-        name: Option<String>,
-        id: u32,
-    }
-    #[derive(Deserialize, PartialEq, Debug)]
-    struct O {
-        thing: Vec<N>,
-    }
     #[test]
     fn record_optional() -> Result<(), Box<Error>> {
-        assert_eq!(
-            O {
-                thing: vec![
-                    N {
-                        name: Some("X".to_string()),
-                        id: 1
-                    },
-                    N { name: None, id: 2 },
-                ]
-            },
-            from_str("thing:\n  name: X\n  id: 1\nthing:\n  id: 2\n")?
-        );
-        match from_str::<O>("thing: X\n  id: 1\nthing:\n  id: 2\n") {
-            Err(Error::FailedParse(ParseError::InvalidSubstitute)) => (),
-            r => panic!("bad result {:?}", r),
+        #[derive(Deserialize, PartialEq, Debug)]
+        struct Thing {
+            name: Option<String>,
+            id: u32,
+        }
+
+        #[derive(Deserialize, PartialEq, Debug)]
+        struct Data {
+            thing: Vec<Thing>,
+        }
+
+        let data = Data {
+            thing: Vec::from([
+                Thing {
+                    name: Some("X".to_string()),
+                    id: 1,
+                },
+                Thing { name: None, id: 2 },
+            ]),
         };
-        Ok(())
+        assert_eq!(
+            data,
+            from_str("thing:\n  name: X\n  id: 1\nthing:\n  id: 2\n")?,
+        );
+        let data = "thing: X\n  id: 1\nthing:\n  id: 2\n";
+        match from_str::<Data>(data).unwrap_err() {
+            Error::FailedParse(ParseError::InvalidSubstitute) => Ok(()),
+            r => panic!("bad error {r:?}"),
+        }
     }
 
-    #[derive(Debug, Deserialize, PartialEq)]
-    struct R {
-        name: F,
-        other: u32,
-    }
     #[test]
     fn substitute_record() -> Result<(), Box<Error>> {
-        let r = R {
-            name: F { int: 999 },
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Data {
+            name: Wrapper,
+            other: u32,
+        }
+
+        let data = Data {
+            name: Wrapper { int: 999 },
             other: 15,
         };
-        assert_eq!(r, from_str("name: 999\nother: 15\n")?);
-        assert_eq!(r, from_str("name:\n  int: 999\nother: 15\n")?);
+        assert_eq!(data, from_str("name: 999\nother: 15\n")?);
+        assert_eq!(data, from_str("name:\n  int: 999\nother: 15\n")?);
         Ok(())
     }
 
-    #[derive(Debug, Deserialize, PartialEq)]
-    struct S {
-        group: Option<T>,
-    }
-    #[derive(Debug, Deserialize, PartialEq)]
-    struct T {
-        label: String,
-    }
     #[test]
     fn no_substitute_optional() -> Result<(), Box<Error>> {
-        assert_eq!(
-            S {
-                group: Some(T {
-                    label: String::from("group label")
-                })
-            },
-            from_str("group: group label\n")?,
-        );
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Group {
+            label: String,
+        }
+
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Data {
+            group: Option<Group>,
+        }
+
+        let data = Data {
+            group: Some(Group {
+                label: String::from("group label"),
+            }),
+        };
+        assert_eq!(data, from_str("group: group label\n")?,);
         Ok(())
     }
 
-    #[derive(Debug, Deserialize, PartialEq)]
-    struct U {
-        chan: Vec<H>,
-    }
     #[test]
     fn no_substitute_list() -> Result<(), Box<Error>> {
-        match from_str::<U>("chan: first second\n") {
-            Err(Error::FailedParse(ParseError::InvalidSubstitute)) => (),
-            r => panic!("bad result {:?}", r),
-        };
-        Ok(())
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Data {
+            chan: Vec<Strings>,
+        }
+
+        match from_str::<Data>("chan: first second\n").unwrap_err() {
+            Error::FailedParse(ParseError::InvalidSubstitute) => Ok(()),
+            r => panic!("bad error {r:?}"),
+        }
     }
 
-    #[derive(Debug, Deserialize, PartialEq)]
-    struct V {
-        dict: HashMap<String, String>,
-    }
     #[test]
     #[ignore]
     fn hashmap_dict() -> Result<(), Box<Error>> {
-        let mut v = V {
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Data {
+            dict: HashMap<String, String>,
+        }
+
+        let mut data = Data {
             dict: HashMap::new(),
         };
-        assert_eq!(v, from_str("dict:\n")?);
-        v.dict.insert("key".to_string(), "value".to_string());
-        assert_eq!(v, from_str("dict:\n  key: value\n")?);
+        assert_eq!(data, from_str("dict:\n")?);
+        data.dict.insert("key".to_string(), "value".to_string());
+        assert_eq!(data, from_str("dict:\n  key: value\n")?);
         Ok(())
     }
 }
