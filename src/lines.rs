@@ -39,17 +39,6 @@ pub(crate) enum Line<'a> {
     Definition(&'a str, Separator, &'a str),
 }
 
-/// Iterator for lines
-///
-/// If a parsing error happens, the [`LineIter::next()`] method will return
-/// `None`.  Use [`LineIter::error()`] to check for this.
-pub(crate) struct LineIter<'a> {
-    /// Input string
-    input: &'a str,
-    /// Parsing error
-    error: Option<ParseError>,
-}
-
 /// Iterator for definitions
 ///
 /// If a parsing error happens, the [`DefIter::next()`] method will return
@@ -150,41 +139,31 @@ impl<'a> Line<'a> {
     }
 }
 
+/// Iterator over lines
+pub(crate) struct LineIter<'a> {
+    /// Input string
+    input: &'a str,
+}
+
 impl<'a> LineIter<'a> {
     /// Create a new line iterator
     pub(crate) fn new(input: &'a str) -> Self {
-        LineIter { input, error: None }
-    }
-
-    /// Get most recent parse error
-    pub(crate) fn error(&self) -> Option<ParseError> {
-        self.error
+        LineIter { input }
     }
 }
 
 impl<'a> Iterator for LineIter<'a> {
-    type Item = Line<'a>;
+    type Item = Result<Line<'a>, ParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         // Should keys be allowed to contain linefeeds?
         if let Some(lf) = self.input.find('\n') {
             let (line, remaining) = self.input.split_at(lf);
             self.input = &remaining[1..]; // trim linefeed
-            match Line::new(line) {
-                Ok(line) => {
-                    self.error = None;
-                    Some(line)
-                }
-                Err(e) => {
-                    self.error = Some(e);
-                    None
-                }
-            }
+            Some(Line::new(line))
         } else if !self.input.is_empty() {
-            self.error = Some(ParseError::MissingLinefeed);
-            None
+            Some(Err(ParseError::MissingLinefeed))
         } else {
-            self.error = None;
             None
         }
     }
@@ -361,6 +340,13 @@ impl<'a> Iterator for DefIter<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         self.error = None;
         while let Some(ln) = self.lines.next() {
+            let ln = match ln {
+                Ok(ln) => ln,
+                Err(e) => {
+                    self.error = Some(e);
+                    return None;
+                },
+            };
             match self.process_line(ln) {
                 Ok(None) => (),
                 Ok(Some(define)) => {
@@ -373,7 +359,6 @@ impl<'a> Iterator for DefIter<'a> {
                 }
             }
         }
-        self.error = self.lines.error();
         None
     }
 }
@@ -386,21 +371,21 @@ mod test {
     fn valid_li() {
         let a = ":::\n# Comment\n:::\n\na: value a\nb:=value b\nc:>value c\n";
         let mut li = LineIter::new(a);
-        assert_eq!(li.next().unwrap(), Line::SchemaSeparator);
-        assert_eq!(li.next().unwrap(), Line::Comment("# Comment"));
-        assert_eq!(li.next().unwrap(), Line::SchemaSeparator);
-        assert_eq!(li.next().unwrap(), Line::Blank);
+        assert_eq!(li.next().unwrap(), Ok(Line::SchemaSeparator));
+        assert_eq!(li.next().unwrap(), Ok(Line::Comment("# Comment")));
+        assert_eq!(li.next().unwrap(), Ok(Line::SchemaSeparator));
+        assert_eq!(li.next().unwrap(), Ok(Line::Blank));
         assert_eq!(
             li.next().unwrap(),
-            Line::Definition("a", Separator::Normal, "value a")
+            Ok(Line::Definition("a", Separator::Normal, "value a")),
         );
         assert_eq!(
             li.next().unwrap(),
-            Line::Definition("b", Separator::TextValue, "value b")
+            Ok(Line::Definition("b", Separator::TextValue, "value b")),
         );
         assert_eq!(
             li.next().unwrap(),
-            Line::Definition("c", Separator::TextAppend, "value c")
+            Ok(Line::Definition("c", Separator::TextAppend, "value c")),
         );
     }
 
@@ -408,17 +393,12 @@ mod test {
     fn invalid_li() {
         let a = ":value\nkey value\n\"key: value\"\na:value a\nb: value b";
         let mut li = LineIter::new(a);
-        assert_eq!(li.next(), None);
-        assert_eq!(li.error(), Some(ParseError::MissingKey));
-        assert_eq!(li.next(), None);
-        assert_eq!(li.error(), Some(ParseError::MissingSeparator));
-        assert_eq!(li.next(), None);
-        assert_eq!(li.error(), Some(ParseError::InvalidSeparator));
-        assert_eq!(li.next(), None);
-        assert_eq!(li.error(), Some(ParseError::InvalidSeparator));
-        assert_eq!(li.next(), None);
-        assert_eq!(li.error(), Some(ParseError::MissingLinefeed));
-        assert_eq!(li.next(), None);
+        assert_eq!(li.next(), Some(Err(ParseError::MissingKey)));
+        assert_eq!(li.next(), Some(Err(ParseError::MissingSeparator)));
+        assert_eq!(li.next(), Some(Err(ParseError::InvalidSeparator)));
+        assert_eq!(li.next(), Some(Err(ParseError::InvalidSeparator)));
+        assert_eq!(li.next(), Some(Err(ParseError::MissingLinefeed)));
+        assert_eq!(li.next(), Some(Err(ParseError::MissingLinefeed)));
     }
 
     #[test]
