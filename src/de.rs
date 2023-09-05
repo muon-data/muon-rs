@@ -105,13 +105,13 @@ struct MappingIter<'a> {
     /// Define iterator
     defs: DefIter<'a>,
     /// Current define
-    define: Option<Define<'a>>,
+    define: Option<Result<Define<'a>, ParseError>>,
     /// Stack of nested branches
     stack: Vec<Branch<'a>>,
 }
 
 impl<'a> Iterator for MappingIter<'a> {
-    type Item = Define<'a>;
+    type Item = Result<Define<'a>, ParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.define.is_none() {
@@ -130,7 +130,7 @@ impl<'a> MappingIter<'a> {
     fn new(input: &'a str) -> Self {
         let defs = DefIter::new(input);
         let define = None;
-        let stack = vec![];
+        let stack = Vec::new();
         MappingIter {
             defs,
             define,
@@ -139,28 +139,25 @@ impl<'a> MappingIter<'a> {
     }
 
     /// Peek at next define
-    fn peek(&mut self) -> Result<Option<Define<'a>>> {
-        if let Some(e) = self.defs.error() {
-            return Err(Error::FailedParse(e));
-        }
+    fn peek(&mut self) -> Option<Result<Define<'a>, ParseError>> {
         if self.define.is_none() {
             self.define = self.defs.next();
         }
-        Ok(self.define)
+        self.define
     }
 
     /// Get the next define in a list
-    fn next_list(&mut self) -> Option<Define<'a>> {
-        if let Some(define) = self.define {
+    fn next_list(&mut self) -> Option<Result<Define<'a>, ParseError>> {
+        if let Some(Ok(define)) = self.define {
             match define.separator {
                 Separator::Normal => {
                     let (d0, d1) = define.split_list();
-                    self.define = d1;
-                    Some(d0)
+                    self.define = Ok(d1).transpose();
+                    Some(Ok(d0))
                 }
                 _ => {
                     self.define = None;
-                    Some(define)
+                    Some(Ok(define))
                 }
             }
         } else {
@@ -179,19 +176,19 @@ impl<'a> MappingIter<'a> {
     }
 
     /// Check record substitute
-    fn check_substitute(&mut self) -> Result<()> {
+    fn check_substitute(&mut self) -> Result {
         let indent = self.stack.len();
         if let Some(branch) = self.stack.last_mut() {
             if let Some(key) = branch.first_field() {
-                if let Some(define) = self.define.take() {
+                if let Some(Ok(define)) = self.define.take() {
                     if !define.value.is_empty() && indent > 0 {
                         branch.substitute = Some(key);
-                        self.define = Some(Define::new(
+                        self.define = Some(Ok(Define::new(
                             indent - 1,
                             key,
                             define.separator,
                             define.value,
-                        ))
+                        )))
                     }
                 }
             }
@@ -223,7 +220,7 @@ impl<'a> MappingIter<'a> {
 
     /// Check whether indent nesting matches
     fn check_indent(&mut self) -> Result<bool> {
-        match self.peek()? {
+        match self.peek().transpose().map_err(Error::FailedParse)? {
             Some(define) => Ok(define.check_indent(self.stack.len())),
             None => Ok(false),
         }
@@ -254,7 +251,9 @@ impl<'a> MappingIter<'a> {
     fn check_key(&mut self) -> Result<bool> {
         if let Some(branch) = self.stack.last() {
             if let Some(k) = branch.key {
-                if let Some(define) = self.peek()? {
+                if let Some(define) =
+                    self.peek().transpose().map_err(Error::FailedParse)?
+                {
                     return Ok(define.key == k);
                 }
             }
@@ -269,7 +268,7 @@ impl<'a> MappingIter<'a> {
 
     /// Check if separator is a text append
     fn is_separator_text_append(&mut self) -> Result<bool> {
-        match self.peek()? {
+        match self.peek().transpose().map_err(Error::FailedParse)? {
             Some(define) => Ok(define.separator == Separator::TextAppend),
             _ => Ok(false),
         }
@@ -283,6 +282,7 @@ impl<'a> MappingIter<'a> {
 
 /// Structure that can deserialize MuON into values.
 pub struct Deserializer<'de> {
+    /// Iterator over key/value mappings
     mappings: MappingIter<'de>,
 }
 
@@ -423,20 +423,18 @@ impl<'de> Deserializer<'de> {
     /// Parse a define into a result
     fn define_result(
         &self,
-        define: Option<Define<'de>>,
+        define: Option<Result<Define<'de>, ParseError>>,
     ) -> Result<Define<'de>> {
         match define {
-            Some(define) => Ok(define),
-            None => match self.mappings.defs.error() {
-                Some(e) => Err(Error::FailedParse(e)),
-                None => Err(Error::FailedParse(ParseError::ExpectedMore)),
-            },
+            Some(Ok(define)) => Ok(define),
+            Some(Err(e)) => Err(Error::FailedParse(e)),
+            None => Err(Error::FailedParse(ParseError::ExpectedMore)),
         }
     }
 
     /// Peek the current key
     fn peek_key(&mut self) -> Result<&'de str> {
-        let def = self.mappings.peek()?;
+        let def = self.mappings.peek();
         Ok(self.define_result(def)?.key)
     }
 
@@ -615,7 +613,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: Visitor<'de>,
     {
         if self.mappings.branch_state() == BranchState::Cleanup {
-            return Err(Error::FailedParse(ParseError::MissingField));
+            return visitor.visit_str("");
         }
         match self.parse_text()? {
             Cow::Owned(val) => visitor.visit_string(val),
@@ -764,7 +762,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
                 return visitor.visit_borrowed_str(field);
             }
         }
-        let key = self.peek_key()?;
+        let key = dbg!(self.peek_key()?);
         self.mappings.set_key(Some(key));
         visitor.visit_borrowed_str(key)
     }
@@ -1078,7 +1076,7 @@ mod test {
 
     #[test]
     fn record_bad() -> Result<(), Box<Error>> {
-        let people = "person:\n  score: 500\n\
+        let people = "person:\n  name: Genghis Khan\n\
                       person:\n  name: Josef Stalin\n  score: 250\n";
         match from_str::<People>(people).unwrap_err() {
             Error::FailedParse(ParseError::MissingField) => Ok(()),
@@ -1191,7 +1189,7 @@ mod test {
     }
 
     #[test]
-    fn no_substitute_optional() -> Result<(), Box<Error>> {
+    fn substitute_optional_record() -> Result<(), Box<Error>> {
         #[derive(Debug, Deserialize, PartialEq)]
         struct Group {
             label: String,
@@ -1207,7 +1205,15 @@ mod test {
                 label: String::from("group label"),
             }),
         };
-        assert_eq!(data, from_str("group: group label\n")?,);
+        assert_eq!(data, from_str("group: group label\n")?);
+        let data = Data { group: None };
+        assert_eq!(data, from_str("\n")?);
+        let data = Data {
+            group: Some(Group {
+                label: String::new(),
+            }),
+        };
+        assert_eq!(data, from_str("group:\n")?);
         Ok(())
     }
 
@@ -1219,6 +1225,24 @@ mod test {
         }
 
         match from_str::<Data>("chan: first second\n").unwrap_err() {
+            Error::FailedParse(ParseError::InvalidSubstitute) => Ok(()),
+            r => panic!("bad error {r:?}"),
+        }
+    }
+
+    #[test]
+    fn no_substitute_option() -> Result<(), Box<Error>> {
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Number {
+            value: Option<i32>,
+        }
+
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Data {
+            num: Number,
+        }
+
+        match from_str::<Data>("num: 42\n").unwrap_err() {
             Error::FailedParse(ParseError::InvalidSubstitute) => Ok(()),
             r => panic!("bad error {r:?}"),
         }
@@ -1238,6 +1262,35 @@ mod test {
         assert_eq!(data, from_str("dict:\n")?);
         data.dict.insert("key".to_string(), "value".to_string());
         assert_eq!(data, from_str("dict:\n  key: value\n")?);
+        Ok(())
+    }
+
+    #[test]
+    fn substitute_list_record() -> Result<(), Box<Error>> {
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Name {
+            value: String,
+        }
+
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Data {
+            name: Vec<Name>,
+        }
+
+        let data = Data {
+            name: Vec::from([
+                Name {
+                    value: "test".to_string(),
+                },
+                Name {
+                    value: "".to_string(),
+                },
+                Name {
+                    value: "TEST".to_string(),
+                },
+            ]),
+        };
+        assert_eq!(data, from_str("name: test\nname: \nname: TEST\n")?);
         Ok(())
     }
 }
