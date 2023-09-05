@@ -96,7 +96,7 @@ pub enum Error {
 }
 
 /// MuON result type
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T = (), E = Error> = std::result::Result<T, E>;
 
 impl serde::ser::Error for Error {
     fn custom<T: Display>(msg: T) -> Self {
