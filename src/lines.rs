@@ -330,11 +330,7 @@ impl<'a> Iterator for DefIter<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(ln) = self.lines.next() {
-            let ln = match ln {
-                Ok(ln) => ln,
-                Err(e) => return Some(Err(e)),
-            };
-            match self.process_line(ln) {
+            match ln.and_then(|ln| self.process_line(ln)) {
                 Ok(None) => (),
                 Ok(Some(define)) => {
                     self.define = Some(define);
