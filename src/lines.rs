@@ -39,23 +39,6 @@ pub(crate) enum Line<'a> {
     Definition(&'a str, Separator, &'a str),
 }
 
-/// Iterator for definitions
-///
-/// If a parsing error happens, the [`DefIter::next()`] method will return
-/// `None`.  Use [`DefIter::error()`] to check for this.
-pub(crate) struct DefIter<'a> {
-    /// Line iterator
-    lines: LineIter<'a>,
-    /// Number of spaces in one indent
-    indent_spaces: Option<usize>,
-    /// Parsed schema
-    schema: Option<Schema<'a>>,
-    /// Current definition (for append handling)
-    define: Option<Define<'a>>,
-    /// Parsing error
-    error: Option<ParseError>,
-}
-
 impl State {
     /// Parse one character
     ///
@@ -179,6 +162,21 @@ fn key_indent(key: &str) -> Option<usize> {
     }
 }
 
+/// Iterator for definitions
+///
+/// If a parsing error happens, the [`DefIter::next()`] method will return
+/// `None`.  Use [`DefIter::error()`] to check for this.
+pub(crate) struct DefIter<'a> {
+    /// Line iterator
+    lines: LineIter<'a>,
+    /// Number of spaces in one indent
+    indent_spaces: Option<usize>,
+    /// Parsed schema
+    schema: Option<Schema<'a>>,
+    /// Current definition (for append handling)
+    define: Option<Define<'a>>,
+}
+
 impl<'a> DefIter<'a> {
     /// Create a new definition iterator
     pub(crate) fn new(input: &'a str) -> Self {
@@ -186,13 +184,11 @@ impl<'a> DefIter<'a> {
         let indent_spaces = None;
         let schema = None;
         let define = None;
-        let error = None;
         DefIter {
             lines,
             indent_spaces,
             schema,
             define,
-            error,
         }
     }
 
@@ -200,11 +196,6 @@ impl<'a> DefIter<'a> {
     #[allow(dead_code)]
     pub(crate) fn schema(&self) -> Option<&Schema> {
         self.schema.as_ref()
-    }
-
-    /// Get most recent parse error
-    pub(crate) fn error(&self) -> Option<ParseError> {
-        self.error
     }
 
     /// Set the indent spaces if needed
@@ -335,28 +326,21 @@ impl<'a> DefIter<'a> {
 }
 
 impl<'a> Iterator for DefIter<'a> {
-    type Item = Define<'a>;
+    type Item = Result<Define<'a>, ParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.error = None;
         while let Some(ln) = self.lines.next() {
             let ln = match ln {
                 Ok(ln) => ln,
-                Err(e) => {
-                    self.error = Some(e);
-                    return None;
-                },
+                Err(e) => return Some(Err(e)),
             };
             match self.process_line(ln) {
                 Ok(None) => (),
                 Ok(Some(define)) => {
                     self.define = Some(define);
-                    return Some(define);
+                    return Some(Ok(define));
                 }
-                Err(e) => {
-                    self.error = Some(e);
-                    return None;
-                }
+                Err(e) => return Some(Err(e)),
             }
         }
         None
@@ -409,24 +393,22 @@ mod test {
         assert_ne!(d, None);
         assert_eq!(
             d.unwrap(),
-            Define::new(0, "a", Separator::Normal, "value a")
+            Ok(Define::new(0, "a", Separator::Normal, "value a")),
         );
-        assert_eq!(di.next(), None);
-        assert_eq!(di.error(), Some(ParseError::UnexpectedSchemaSeparator));
+        assert_eq!(di.next(), Some(Err(ParseError::UnexpectedSchemaSeparator)));
         assert_eq!(
             di.next().unwrap(),
-            Define::new(0, "b", Separator::Normal, "value b")
-        );
-        assert_eq!(
-            di.next().unwrap(),
-            Define::new(0, "c", Separator::Normal, "")
+            Ok(Define::new(0, "b", Separator::Normal, "value b")),
         );
         assert_eq!(
             di.next().unwrap(),
-            Define::new(0, "c", Separator::Normal, "append")
+            Ok(Define::new(0, "c", Separator::Normal, "")),
         );
-        assert_eq!(di.next(), None);
-        assert_eq!(di.error(), Some(ParseError::InvalidIndent));
+        assert_eq!(
+            di.next().unwrap(),
+            Ok(Define::new(0, "c", Separator::Normal, "append")),
+        );
+        assert_eq!(di.next(), Some(Err(ParseError::InvalidIndent)));
     }
 
     #[test]
@@ -436,33 +418,32 @@ mod test {
         let mut di = DefIter::new(a);
         assert_eq!(
             di.next().unwrap(),
-            Define::new(0, "a", Separator::Normal, "")
+            Ok(Define::new(0, "a", Separator::Normal, "")),
         );
         assert_eq!(
             di.next().unwrap(),
-            Define::new(1, "b", Separator::Normal, "1")
+            Ok(Define::new(1, "b", Separator::Normal, "1")),
         );
         assert_eq!(
             di.next().unwrap(),
-            Define::new(1, "cc", Separator::TextValue, "this")
+            Ok(Define::new(1, "cc", Separator::TextValue, "this")),
         );
         assert_eq!(
             di.next().unwrap(),
-            Define::new(1, "c", Separator::TextAppend, "test")
+            Ok(Define::new(1, "c", Separator::TextAppend, "test")),
         );
         assert_eq!(
             di.next().unwrap(),
-            Define::new(1, "d", Separator::Normal, "")
+            Ok(Define::new(1, "d", Separator::Normal, "")),
         );
-        assert_eq!(di.next(), None);
-        assert_eq!(di.error(), Some(ParseError::InvalidIndent));
+        assert_eq!(di.next(), Some(Err(ParseError::InvalidIndent)));
         assert_eq!(
             di.next().unwrap(),
-            Define::new(2, "e", Separator::Normal, "5.5")
+            Ok(Define::new(2, "e", Separator::Normal, "5.5")),
         );
         assert_eq!(
             di.next().unwrap(),
-            Define::new(1, "f", Separator::Normal, "-9")
+            Ok(Define::new(1, "f", Separator::Normal, "-9")),
         );
     }
 }
